@@ -1,0 +1,70 @@
+name: security
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "27 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  pull-requests: read # gitleaks reads PR commits
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: osv-scanner
+        uses: google/osv-scanner-action/osv-scanner-action@8deb546fdb875b9996d27d4950be7312dac076a1  # v2.5.0
+        continue-on-error: true
+        with:
+          scan-args: |-
+            --recursive
+            ./
+
+      - name: trivy filesystem
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          # Fails the job rather than uploading SARIF: the Security tab needs
+          # GitHub Advanced Security, which the private repos in the fleet
+          # don't have.
+          exit-code: "1"
+
+      # License compliance. .fossa.yml has been sitting in every repo unused —
+      # this is the step that actually runs it. The secret check lives in the
+      # script rather than in `if:` so a repo with no FOSSA project skips the
+      # scan and still goes green.
+      - name: fossa license scan
+        if: hashFiles('.fossa.yml') != ''
+        env:
+          FOSSA_API_KEY: ${{ secrets.FOSSA_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FOSSA_API_KEY:-}" ]; then
+            echo "::notice::FOSSA_API_KEY not configured — skipping license scan."
+            exit 0
+          fi
+          curl -fsSL https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
+          fossa analyze
+          # Fails the job on a policy violation: copyleft in a permissive repo,
+          # or a dependency with no resolvable license.
+          fossa test --timeout 600

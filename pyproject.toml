@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scoville"
+version = "0.1.0"
+description = "Risk posture for shell commands: score, blast radius and reversibility before you run them"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Fabio Cicerchia" }]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/fabiocicerchia/scoville"
+Issues = "https://github.com/fabiocicerchia/scoville/issues"
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "build"]
+
+[project.scripts]
+scoville = "scoville:main"
+
+[tool.setuptools]
+py-modules = ["scoville"]
+
+[tool.ruff]
+line-length = 100

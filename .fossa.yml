@@ -1,0 +1,23 @@
+# FOSSA license & dependency compliance. Run `fossa analyze` locally or in CI
+# with FOSSA_API_KEY set. Docs: https://github.com/fossas/fossa-cli
+#
+# Wired into .github/workflows/security.yml, which skips the step when
+# FOSSA_API_KEY is not configured — so a repo without the secret still gets a
+# green security run.
+#
+# Replace fabiocicerchia/scoville and scoville when instantiating the skeleton.
+version: 3
+
+project:
+  id: github.com/fabiocicerchia/scoville
+  name: scoville
+
+# Third-party components that FOSSA cannot discover from a lockfile — binaries
+# downloaded in a Dockerfile, sources compiled from a tarball, vendored trees.
+# Anything listed in NOTICE that is not in a package manifest belongs here.
+# See fabiocicerchia/nginx-lua's fossa-deps.yml for a worked example.
+#
+# remote-dependencies:
+#   - name: example-tool
+#     url: "https://github.com/example/example-tool/archive/v1.2.3.tar.gz"
+#     version: "1.2.3"

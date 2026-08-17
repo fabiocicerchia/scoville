@@ -1,0 +1,91 @@
+# Run `pre-commit install` once per clone (or `make setup`).
+#
+# Hooks are pinned to a commit SHA with the tag in a comment, the same policy the
+# GitHub Actions workflows use: a tag can be moved, a SHA cannot. CI runs this
+# file (`pre-commit/action`), so what is here is what gates a pull request.
+#
+# Everything above the language blocks is the portfolio-wide baseline and is
+# identical in every repo. Only the Python block below applies here.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # v6.0.0
+    hooks:
+      # Whitespace and line endings.
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      # A UTF-8 BOM makes a shebang unreadable and a JSON parser choke, and it
+      # is invisible in every diff view — strip it rather than debug it.
+      - id: fix-byte-order-marker
+
+      # Parseable data files: a broken manifest fails here rather than in a
+      # deploy.
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-json
+      - id: check-toml
+      - id: check-ast
+      # Sorts and dedupes requirements files, which is where most of the
+      # merge conflicts in docs/requirements.txt came from.
+      - id: requirements-txt-fixer
+
+      # Things that are only painful once they are in history.
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-illegal-windows-names
+      - id: check-symlinks
+      - id: destroyed-symlinks
+      - id: forbid-submodules
+      - id: check-vcs-permalinks
+
+      # A script without its executable bit does not run.
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+      - id: detect-private-key
+      - id: detect-aws-credentials
+        # Without this the hook fails on any machine that has no
+        # ~/.aws/credentials — i.e. every CI runner — regardless of the diff.
+        args: [--allow-missing-credentials]
+
+      # `breakpoint()` and pdb imports left in a commit.
+      - id: debug-statements
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # v8.30.1
+    hooks:
+      - id: gitleaks
+
+  # --- Language blocks: keep what applies, delete what does not. ---
+
+  # Python. Lint and format; per-repo strictness lives in pyproject.toml.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 39d9ac5938dadb73df0564a45f163e25ff9fa6e2  # v0.16.1
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  # Shell. Picks up extensionless scripts by shebang, so `bin/` entrypoints and
+  # other extensionless scripts are covered too.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: 745eface02aef23e168a8afb6b5737818efbea95  # v0.11.0.1
+    hooks:
+      - id: shellcheck
+        # warning and above. The style/info notes are mostly SC1091 (a sourced
+        # file the linter cannot see), which is noise in a repo of small scripts.
+        args: [--severity=warning]
+
+  # Dockerfiles. Rules and thresholds live in .hadolint.yaml.
+  - repo: https://github.com/hadolint/hadolint
+    rev: 2eece55955ced00200be9729e9728cb7dacca505  # v2.15.1
+    hooks:
+      - id: hadolint-docker
+
+  # Flags energy-wasteful patterns (busy loops, every-minute crons, SELECT *,
+  # unpinned full-fat base images, missing k8s resource limits, ...). Gating in
+  # CI too: code-quality.yml runs this file via pre-commit/action.
+  - repo: https://github.com/fabiocicerchia/greenlint
+    rev: 999d7e4a1be32f7ea8456afa58ded111c99f944d  # v0.1.4
+    hooks:
+      - id: greenlint

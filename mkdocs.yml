@@ -13,8 +13,11 @@ theme:
 
 nav:
   - Home: README.md
-  - Architecture: architecture.md
   - Getting Started: getting-started.md
+  - Scoring: scoring.md
+  - Rules: rules.md
+  - Architecture: architecture.md
+  - Known limits: limits.md
 
 markdown_extensions:
   - admonition

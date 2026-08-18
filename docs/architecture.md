@@ -32,6 +32,61 @@ input (argv | -f file | stdin)
   → report (text | json), exit per --fail-on
 ```
 
+## Carriers and introspection, worked
+
+`docker exec` is a middling risk on its own; what matters is what it carries.
+The wrapper contributes a base and a context weight, the payload contributes the
+rest:
+
+```console
+$ scoville 'docker exec web ls /app' 'docker exec -u root api rm -rf /var/lib/data'
+docker exec web ls /app
+  LOW         20/100  ·  scope: container  ·  reversible
+     +20  runs a command inside a running container: scored on the payload below
+       ·  payload `ls /app` is safe — runs inside the container: its filesystem, its mounts, its credentials
+
+docker exec -u root api rm -rf /var/lib/data
+  HIGH        77/100  ·  scope: container  ·  irreversible
+     +20  runs a command inside a running container: scored on the payload below
+      +8  runs as root inside the container
+     +49  payload `rm -rf /var/lib/data` is medium — runs inside the container: its filesystem, its mounts, its credentials
+```
+
+A wrapper script hides the payload the same way, so it is scored as opaque until
+`--introspect` reads it:
+
+```console
+$ scoville './foo.sh prod'
+  MEDIUM      40/100  ·  scope: none  ·  reversible
+     +20  runs `./foo.sh`: the commands are inside the script, not on this line — re-run with --introspect to read it
+
+$ scoville './foo.sh prod' --introspect
+  CRITICAL   100/100  ·  scope: host  ·  irreversible
+     +98  resolved wrapper `./foo.sh` line 6 runs `rm -rf "$BUILD_DIR"/`, which is critical
+```
+
+Reading resolves uncertainty in *both* directions — a wrapper that turns out to
+run `ls` scores lower once it has been read, not higher.
+
+When the payload is hidden behind an image `ENTRYPOINT`, the command line alone
+cannot tell you anything, so scoville says so and `--introspect` resolves it
+with read-only `docker inspect` calls — never a pull, never a run:
+
+```console
+$ scoville 'docker run acme/importer:1.2'
+docker run acme/importer:1.2
+  MEDIUM      40/100  ·  scope: container  ·  reversible
+     +20  starts a container: what actually runs is the image ENTRYPOINT/CMD unless overridden
+     +20  no explicit command: what runs is the image ENTRYPOINT/CMD, not this line; re-run with --introspect to resolve it
+
+$ scoville 'docker run acme/importer:1.2' --introspect
+docker run acme/importer:1.2
+  CRITICAL   100/100  ·  scope: container  ·  irreversible
+     +20  starts a container: what actually runs is the image ENTRYPOINT/CMD unless overridden
+     +85  resolved entrypoint `/bin/sh -c 'rm -rf /data'` is critical — runs in a fresh container from this image
+      +8  the image runs as root
+```
+
 ## Decisions
 
 **Two facets, not one number.** Scope and reversibility answer different

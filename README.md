@@ -5,7 +5,7 @@
 [![CI](https://github.com/fabiocicerchia/scoville/actions/workflows/ci.yml/badge.svg)](https://github.com/fabiocicerchia/scoville/actions/workflows/ci.yml)
 [![Code Quality](https://github.com/fabiocicerchia/scoville/actions/workflows/code-quality.yml/badge.svg)](https://github.com/fabiocicerchia/scoville/actions/workflows/code-quality.yml)
 [![Security](https://github.com/fabiocicerchia/scoville/actions/workflows/security.yml/badge.svg)](https://github.com/fabiocicerchia/scoville/actions/workflows/security.yml)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/fabiocicerchia/scoville/badge)](https://securityscorecards.dev/viewer/?uri=github.com/fabiocicerchia/scoville)
 [![CI carbon](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fabiocicerchia/scoville/gh-pages/badge.json)](.github/workflows/carbon-badge.yml)
 [![Release](https://img.shields.io/github/v/release/fabiocicerchia/scoville)](https://github.com/fabiocicerchia/scoville/releases)
@@ -164,4 +164,4 @@ Need help implementing this? [Get in touch](https://fabiocicerchia.it/contact).
 
 ## License
 
-[MIT](LICENSE) © Fabio Cicerchia
+[Apache-2.0](LICENSE) © Fabio Cicerchia

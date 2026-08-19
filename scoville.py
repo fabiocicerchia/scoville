@@ -40,6 +40,11 @@ REVERT = ("reversible", "recoverable", "irreversible")
 
 
 def band(score):
+    """Name the band a score falls in.
+
+    Deliberately coarse: the band is what a caller acts on, the score only
+    orders commands inside one.
+    """
     for threshold, name in BANDS:
         if score >= threshold:
             return name
@@ -47,10 +52,13 @@ def band(score):
 
 
 def widest(a, b):
+    """Return the wider of two blast radii — scope only ever grows."""
     return a if SCOPES.index(a) >= SCOPES.index(b) else b
 
 
 def harder(a, b):
+    """Return the less recoverable of two verdicts — reversibility only ever
+    gets worse as factors accumulate."""
     return a if REVERT.index(a) >= REVERT.index(b) else b
 
 
@@ -58,6 +66,11 @@ def harder(a, b):
 
 
 def _check(rid, scope, revert):
+    """Refuse a rule that names a scope or reversibility nobody defined.
+
+    The rule set is data, so a typo in a literal would otherwise sail through
+    and score commands with a vocabulary the rest of the module cannot read.
+    """
     assert scope in SCOPES, f"{rid}: unknown scope {scope!r}"
     assert revert in REVERT, f"{rid}: unknown reversibility {revert!r}"
 
@@ -1044,6 +1057,11 @@ def subshell_commands(raw, offset):
 
 
 def tokenize(raw):
+    """Split a command into tokens, whitespace-splitting when shlex refuses.
+
+    An unbalanced quote is a broken command, not a reason to score nothing:
+    the fallback keeps `rm -rf "/opt` visible instead of dropping it.
+    """
     try:
         return shlex.split(raw, comments=True)
     except ValueError:
@@ -1110,6 +1128,11 @@ SSH_VALUE_FLAGS = {"-i", "-p", "-o", "-l", "-L", "-R", "-D", "-F", "-J", "-b", "
 
 
 def _skip_flags(tokens, value_flags):
+    """Index of the first non-flag token.
+
+    `value_flags` are the flags that swallow the next token as their value,
+    so `docker exec -u root ctr sh` does not mistake `root` for the payload.
+    """
     i = 0
     while i < len(tokens):
         t = tokens[i]
@@ -1206,6 +1229,12 @@ CONTEXTS = {
 
 
 def _docker(args, timeout=5):
+    """Run one read-only `docker` subcommand and return its stdout, or None.
+
+    Nothing is ever executed to score it: this only ever inspects. A missing
+    docker, a timeout, a non-zero exit and an OS error all mean the same
+    thing to the caller — no answer — so they collapse into None.
+    """
     if not shutil.which("docker"):
         return None
     try:
@@ -1322,6 +1351,13 @@ def path_factors(binary, args):
 
 
 def pick_rule(binary, args_str):
+    """Pick the rule that best describes a command, or None.
+
+    Specificity wins before score does: a rule matching this exact
+    subcommand always beats a generic `<cli> ... delete` classifier, even
+    when the generic one would score higher. The classifier is the fallback,
+    not a competitor.
+    """
     candidates = [r for r in RULES if binary in r["bins"]
                   and (r["sub"] is None or r["sub"].search(args_str))]
     if not candidates:
@@ -1523,6 +1559,11 @@ def hidden_payload(binary, rest, rule):
 
 
 def _read(path, basedir):
+    """Read a referenced payload file, or None if it cannot be read safely.
+
+    Size-capped at MAX_SCRIPT_BYTES: a command that points at a multi-megabyte
+    file is not worth stalling a pre-commit hook over.
+    """
     try:
         p = os.path.join(basedir, path) if not os.path.isabs(path) else path
         if os.path.getsize(p) > MAX_SCRIPT_BYTES:
@@ -1534,6 +1575,13 @@ def _read(path, basedir):
 
 
 def _make_recipe(target, basedir):
+    """Return the recipe lines of one Make target, or None.
+
+    A deliberately shallow read — tab-indented lines until the next
+    non-indented one, with the @/-/+ prefixes stripped. No variable
+    expansion and no includes: what it cannot resolve it leaves alone rather
+    than guessing at a command that was never going to run.
+    """
     for name in ("Makefile", "makefile", "GNUmakefile"):
         text = _read(name, basedir)
         if text is None:
@@ -1554,6 +1602,7 @@ def _make_recipe(target, basedir):
 
 
 def _npm_script(name, basedir):
+    """Return the body of one npm script from package.json, or None."""
     text = _read("package.json", basedir)
     if not text:
         return None
@@ -1715,10 +1764,17 @@ COLORS = {"safe": "32", "low": "36", "medium": "33", "high": "31", "critical": "
 
 
 def paint(text, level, on):
+    """Colour text for a level, or hand it back untouched when `on` is false."""
     return f"\033[{COLORS[level]}m{text}\033[0m" if on else text
 
 
 def render_text(results, source=None, color=False, verbose=False, scale="bands"):
+    """Render the human-readable report: one block per command.
+
+    Zero-weight factors are hidden unless `verbose`, or unless the command
+    scored 0 — a safe command with nothing listed under it reads as a tool
+    that failed to run, rather than as a verdict.
+    """
     lines = []
     width = 10 if scale == "bands" else 25
     for r in results:
@@ -1755,6 +1811,13 @@ def public(results):
 
 
 def overall(results):
+    """Collapse a run into one verdict.
+
+    Not an average: the worst score, the widest scope and the least
+    reversible outcome across every command. A script is as dangerous as its
+    most dangerous line, and averaging would let ten harmless commands bury
+    one `rm -rf /`.
+    """
     if not results:
         return {"score": 0, "level": "safe", "scope": "none", "reversibility": "reversible",
                 "commands": 0}
@@ -1768,6 +1831,11 @@ def overall(results):
 
 
 def main(argv=None):
+    """CLI entry point. Returns the process exit status.
+
+    0 when the run completed, 1 when --fail-on is reached, 64 (EX_USAGE) when
+    there was nothing to analyse or the file could not be read.
+    """
     p = argparse.ArgumentParser(prog="scoville", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("command", nargs="*", help="command(s) to analyze; '-' reads stdin")

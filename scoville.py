@@ -1840,7 +1840,8 @@ def main(argv=None):
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("command", nargs="*", help="command(s) to analyze; '-' reads stdin")
     p.add_argument("-f", "--file", help="analyze a script file")
-    p.add_argument("--format", choices=["text", "json"], default="text")
+    p.add_argument("--format", choices=["text", "json"], default="text",
+                   help="text for humans, json for anything downstream")
     p.add_argument("--scale", choices=SCALES, default="bands",
                    help="how to name the levels: bands (safe..critical) or peppers "
                         "(bell pepper..carolina reaper). Text output only")
@@ -1851,8 +1852,10 @@ def main(argv=None):
                    help="resolve hidden image/container entrypoints via read-only docker inspect")
     p.add_argument("--quiet", "-q", action="store_true", help="one line per command")
     p.add_argument("--verbose", "-v", action="store_true", help="show zero-weight factors too")
-    p.add_argument("--no-color", action="store_true")
-    p.add_argument("--list-rules", action="store_true")
+    p.add_argument("--no-color", action="store_true",
+                   help="never colourise (a non-tty and NO_COLOR already disable it)")
+    p.add_argument("--list-rules", action="store_true",
+                   help="print every rule and amplifier, then exit")
     p.add_argument("--version", action="version", version=f"scoville {__version__}")
     args = p.parse_args(argv)
 

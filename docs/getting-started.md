@@ -16,6 +16,26 @@ From a clone:
 pipx install .        # or: pip install .
 ```
 
+### As a container
+
+Every release publishes a multi-arch image (`linux/amd64`, `linux/arm64`) to
+GHCR, tagged `vX.Y.Z`, `vX.Y` and `latest`:
+
+```sh
+docker run --rm ghcr.io/fabiocicerchia/scoville 'rm -rf $BUILD_DIR/'
+```
+
+Pass a script on stdin the same way:
+
+```sh
+docker run --rm -i ghcr.io/fabiocicerchia/scoville < deploy.sh
+```
+
+`--introspect` is the one thing the container cannot do on its own: it reads
+wrapper scripts and asks the docker socket about images, and neither is mounted
+in. Mount what it needs to resolve, read-only, or run scoville on the host for
+that.
+
 ## First run
 
 ```sh

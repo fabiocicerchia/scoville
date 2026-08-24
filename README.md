@@ -91,6 +91,12 @@ From a clone:
 pipx install .        # or: pip install .
 ```
 
+Or as a container — published to GHCR on every release:
+
+```sh
+docker run --rm ghcr.io/fabiocicerchia/scoville 'rm -rf $BUILD_DIR/'
+```
+
 ## Usage
 
 ```sh

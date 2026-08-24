@@ -15,6 +15,10 @@ name: release
 # PyPI is opt-in: configure a Trusted Publisher for this repo on pypi.org
 # (workflow: release.yml, environment: pypi) and set the repository variable
 # PUBLISH_TO_PYPI to "true".
+#
+# The container image goes to ghcr.io/<owner>/<repo> on every release, tagged
+# vX.Y.Z, vX.Y and latest. That needs no configuration at all — see the `docker`
+# job.
 
 on:
   push:
@@ -90,3 +94,62 @@ jobs:
           path: dist/
       - name: Publish to PyPI (trusted publishing)
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+
+  # The container image. Unlike PyPI this needs no external setup and so is not
+  # opt-in: GHCR authenticates with the workflow's own GITHUB_TOKEN, and
+  # `packages: write` is the whole credential.
+  #
+  # It runs after `build` so a release that never got published cannot leave a
+  # tagged image behind pointing at it.
+  docker:
+    needs: [release-please, build]
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io
+    steps:
+      # Same reason as `build`: the tag ref may not have existed when this
+      # workflow started, so build the release commit itself.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+
+      # arm64 is emulated. scoville is pure Python, so the cost of that is a
+      # slow `pip install`, not a cross-compile.
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8  # v4.2.0
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302  # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}
+          # `value:` is explicit because the tag ref is not what triggered this
+          # run — the push to main is.
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag_name }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Attestations ride along in the registry, so this stays within
+          # `packages: write` — no id-token needed.
+          provenance: mode=max
+          sbom: true

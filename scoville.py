@@ -24,7 +24,7 @@ import shutil
 import subprocess
 import sys
 
-__version__ = "0.1.4"  # x-release-please-version
+__version__ = "0.1.5"  # x-release-please-version
 
 # ---------------------------------------------------------------- scales ---
 

@@ -21,7 +21,10 @@ repos:
       # Parseable data files: a broken manifest fails here rather than in a
       # deploy.
       - id: check-yaml
+        # mkdocs.yml carries Material's `!!python/name:...` tags, which safe_load
+        # rejects; `mkdocs build --strict` in CI validates it instead.
         args: [--allow-multiple-documents]
+        exclude: ^mkdocs\.yml$
       - id: check-json
       - id: check-toml
       - id: check-ast

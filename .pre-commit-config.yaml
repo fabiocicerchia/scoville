@@ -22,6 +22,9 @@ repos:
       # deploy.
       - id: check-yaml
         args: [--allow-multiple-documents]
+        # mkdocs.yml carries Material's `!!python/name:...` tags, which
+        # safe_load rejects; `mkdocs build --strict` validates it instead.
+        exclude: ^mkdocs\.yml$
       - id: check-json
       - id: check-toml
       - id: check-ast

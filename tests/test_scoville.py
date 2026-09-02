@@ -3,6 +3,8 @@ import json
 import pytest
 
 from scoville import (
+    INCIDENTS,
+    RULES,
     ConfigError,
     analyze,
     apply_overrides,
@@ -18,7 +20,6 @@ from scoville import (
     split_commands,
     why_text,
 )
-from scoville import INCIDENTS, RULES
 
 
 def one(cmd, **kw):

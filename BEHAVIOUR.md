@@ -167,6 +167,9 @@ a deliberate design choice: the honest answer to "what does this do?" is
 - `./foo.sh` and `source foo.sh` from disk
 - `Makefile` recipes for the named target
 - `package.json` scripts for `npm`/`yarn`/`pnpm run`
+- shell **functions and aliases defined in the analysed input** (and in what it
+  sources): a call to a local function is scored as its body, and an alias is
+  expanded to the command it really is
 
 Resolved content is analysed recursively and reported with the file, the line
 and the command that drove the score. Limits: 3 levels deep, 256 KB per file,
@@ -174,6 +177,20 @@ and a cycle guard so a script that runs itself terminates.
 
 Introspection resolves uncertainty in **both** directions. A wrapper that turns
 out to run `ls` scores *lower* once read, not higher.
+
+Local definitions have three rules of their own:
+
+- **Nothing outside the analysed input is read.** `~/.bashrc` is not consulted,
+  so a script scores the same on any machine.
+- **A name is resolved at the call site.** A function called *above* its own
+  definition is not resolved — bash reads top to bottom — but a function that
+  calls one defined below it is, because both are in scope by the time either
+  runs. A later definition of the same name wins, which is what redefinition
+  means, and an alias shadowing a real binary is the case most worth catching.
+- **Recursion stops rather than unrolling.** A name already on the call chain
+  contributes zero and says so; the non-recursive arm of the body is still
+  scored. The guard is a call stack, not a visited set, so calling the same
+  helper twice scores both calls.
 
 Paths resolve against the directory of the file passed to `-f`, or the current
 working directory otherwise.

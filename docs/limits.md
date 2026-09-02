@@ -22,3 +22,29 @@ version:
 
 That last one is the important one. A gate that people believe is a sandbox is
 worse than no gate, because it changes what they are willing to pipe into it.
+
+## Shell functions and aliases
+
+Under `--introspect`, functions and aliases **defined in the analysed input**
+(and in the files it sources) are resolved: the call site is scored as the body
+it runs, and an alias is expanded to the command it really is. A helper defined
+in a deploy script is a carrier like a make target or an image ENTRYPOINT — the
+call site shows nothing, and in a script that defines its own helpers that is
+most of the interesting lines.
+
+Three boundaries are deliberate:
+
+- **Nothing outside the input is read.** Your `~/.bashrc` is not consulted, so
+  the same script scores the same on two machines. An interactive alias you
+  have loaded will still be scored as an unknown command.
+- **Definitions are ordered, but resolved at the call site.** A function called
+  above its definition is *not* resolved — bash reads top to bottom, and a
+  script with its helpers at the bottom is common enough that assuming
+  otherwise is a false positive. But a function that calls one defined below it
+  *is* resolved, because by the time either runs both are in scope.
+- **Recursion stops, it does not unroll.** A name already on the call chain
+  scores zero and says so; the non-recursive arm of the body is still counted.
+
+The value-blindness limit above still applies, one level further away:
+`deploy prod` binds `$1`, and the body's `rm -rf "$1"` is scored on its shape,
+not on what `prod` expands to.

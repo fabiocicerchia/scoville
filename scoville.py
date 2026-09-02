@@ -1298,6 +1298,90 @@ VAR_PATH = re.compile(r"^\$\{?(\w+)\}?(/.*)?$")
 
 # Factor prefixes that stay visible even at zero points: "the payload is safe"
 # is exactly what someone running `docker exec` wants confirmed.
+# ---------------------------------------------- definitions in this text ---
+#
+# A wrapper script, a make target, an npm script and an image ENTRYPOINT are all
+# already treated as carriers: the call site is opaque and `--introspect`
+# resolves it. Shell functions and aliases are the same problem one level
+# closer, and in a deploy script that defines its own helpers they are most of
+# the interesting lines.
+
+ALIAS_DEF = re.compile(
+    r"(?:^|[;&|]\s*)\s*alias\s+(?P<name>[\w.-]+)="
+    r"(?P<val>'[^']*'|\"[^\"]*\"|\S+)", re.MULTILINE)
+# `name() {` and `function name {`, the two spellings bash accepts.
+FUNC_HEAD = re.compile(
+    r"(?:^|[;&|]\s*)\s*(?:function\s+)?(?P<name>[\w.-]+)\s*\(\s*\)\s*\{", re.MULTILINE)
+FUNC_HEAD_KW = re.compile(
+    r"(?:^|[;&|]\s*)\s*function\s+(?P<name>[\w.-]+)\s*\{", re.MULTILINE)
+
+CARRIER_ALIAS = "resolved alias "
+CARRIER_FUNCTION = "resolved function "
+
+
+def _balanced_body(text, brace_at):
+    """Text between the `{` at `brace_at` and its matching `}`, or None.
+
+    Brace counting, not a regex: a function body containing `${VAR}` or a
+    nested `if ... { }` is ordinary, and a non-greedy match to the first `}`
+    would truncate the body and quietly under-report what it runs.
+    """
+    depth = 0
+    for i in range(brace_at, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace_at + 1:i]
+    return None
+
+
+def collect_definitions(text):
+    """Functions and aliases defined in `text`, each with the offset it goes live.
+
+    Nothing outside `text` is read. Resolving the user's `~/.bashrc` would make
+    the same script score differently on two machines, which is a worse answer
+    than an unknown command — the score has to be a property of the input.
+    """
+    defs = []
+    for m in ALIAS_DEF.finditer(text):
+        val = m.group("val")
+        if val[:1] in "'\"":
+            val = val[1:-1]
+        defs.append({"kind": "alias", "name": m.group("name"), "value": val,
+                     "at": m.end(), "line": text.count("\n", 0, m.start()) + 1})
+    for pattern in (FUNC_HEAD, FUNC_HEAD_KW):
+        for m in pattern.finditer(text):
+            brace = m.end() - 1
+            body = _balanced_body(text, brace)
+            if body is None:
+                continue  # unterminated; scoring half a body is worse than skipping it
+            defs.append({"kind": "function", "name": m.group("name"), "value": body,
+                         # Live only after the closing brace: bash reads the
+                         # whole definition before the name means anything.
+                         "at": brace + len(body) + 2,
+                         "line": text.count("\n", 0, m.start()) + 1})
+    defs.sort(key=lambda d: d["at"])
+    return defs
+
+
+def definition_at(defs, name, offset):
+    """The definition of `name` in scope at `offset`, or None.
+
+    The last definition before the call site wins — that is what redefinition
+    means, and an alias shadowing a real binary is exactly the case worth
+    catching. A definition *after* the call site is not applied: bash reads top
+    to bottom, and scoring it anyway would be a false positive on the common
+    layout of helpers at the bottom of a script.
+    """
+    found = None
+    for d in defs:
+        if d["name"] == name and d["at"] <= offset:
+            found = d
+    return found
+
+
 PAYLOAD = "payload "
 ENTRYPOINT = "resolved entrypoint "
 WRAPPER = "resolved wrapper "
@@ -1365,7 +1449,84 @@ def pick_rule(binary, args_str):
     return max(candidates, key=lambda r: (not r["generic"], r["sub"] is not None, r["base"]))
 
 
-def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=".", seen=None):
+def _score_local_definition(local, raw, binary, args, privileged, strict, introspect,
+                            depth, basedir, seen, defs, offset):
+    """Score a call to a function or alias defined earlier in the same input.
+
+    An alias is *expanded* — `k delete ns prod` is `kubectl delete ns prod`, and
+    scoring it as anything softer would miss the shadowing that makes aliases
+    worth resolving at all. A function gets carrier treatment, like a wrapper
+    script: the call site contributes the frame, the body contributes the score.
+    """
+    seen = seen if seen is not None else set()
+    key = f"{local['kind']}:{local['name']}@{local['at']}"
+    site = f"defined on line {local['line']} of this input"
+
+    if key in seen:
+        # Mutual recursion arrives here too: b is on the stack when a calls it
+        # back. Stopping is the whole answer; the body has already been scored
+        # once further up, and its score is already carried.
+        return {
+            "command": raw.strip(), "rule": "CARRIER-RECURSION", "known": True, "score": 0,
+            "level": "safe", "scope": "none", "reversibility": "reversible",
+            "privileged": privileged, "advice": None, "carries": [],
+            "factors": [{"points": 0, "why": f"`{binary}` is already being scored higher up "
+                                             f"this call chain — recursion stops here",
+                         "keep": True}],
+        }
+
+    if local["kind"] == "alias":
+        expanded = " ".join([local["value"], *args]).strip()
+        seen.add(key)
+        try:
+            # Resolved at the *call* site, not the definition: bash looks a name
+            # up when the line runs, so a helper defined below another one is
+            # still in scope by the time either is called.
+            child = score_command(expanded, tokenize(expanded), strict=strict,
+                                  introspect=introspect, depth=depth + 1, basedir=basedir,
+                                  seen=seen, defs=defs, offset=offset)
+        finally:
+            seen.discard(key)
+        if not child:
+            return None
+        result = dict(child)
+        result["command"] = raw.strip()
+        result["privileged"] = privileged or child["privileged"]
+        result["factors"] = [{"points": 0,
+                              "why": (f"{CARRIER_ALIAS}`{binary}` is `{local['value']}`, {site} "
+                                      f"— scored as `{child['command']}`"),
+                              "keep": True}] + list(child["factors"])
+        return result
+
+    factors = [{"points": 0, "why": f"`{binary}` is a function {site}", "keep": True}]
+    scope, revert, advice, children = "none", "reversible", None, []
+    seen.add(key)
+    try:
+        inner = analyze(local["value"], strict=strict, introspect=introspect, basedir=basedir,
+                        _depth=depth + 1, _seen=seen, _defs=defs, _at=offset)
+    finally:
+        # Discarded, not left behind: calling the same helper twice in one
+        # script is ordinary, and a visited-set would report the second call as
+        # recursion and score it zero.
+        seen.discard(key)
+    worst = max(inner, key=lambda r: r["score"], default=None)
+    if worst and worst["score"]:
+        children.append(worst)
+        factors.append({"points": worst["score"],
+                        "why": (f"{CARRIER_FUNCTION}`{binary}()` runs `{worst['command']}`, "
+                                f"which is {worst['level']}"),
+                        "keep": True})
+        scope, revert, advice = worst["scope"], worst["reversibility"], worst["advice"]
+    score = max(0, min(100, sum(f["points"] for f in factors)))
+    return {
+        "command": raw.strip(), "rule": "CARRIER-FUNCTION", "known": True, "score": score,
+        "level": band(score), "scope": scope, "reversibility": revert,
+        "privileged": privileged, "advice": advice, "factors": factors, "carries": children,
+    }
+
+
+def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=".",
+                  seen=None, defs=None, offset=0):
     """Score one command. Returns a result dict; recurses into payloads."""
     rest, privileged, wrappers = strip_prefix(tokens)
     if not rest:
@@ -1381,6 +1542,17 @@ def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=
             "factors": [{"points": 0, "why": "function definition: the body is scored on its "
                                              "own lines", "keep": False}],
         }
+
+    # A name defined earlier in this same text shadows whatever is on PATH.
+    # Only under --introspect: resolving a carrier is what that flag means, and
+    # the default path must keep scoring exactly what it is shown.
+    local = definition_at(defs, binary, offset) if (introspect and defs) else None
+    if local and depth < 3:
+        resolved = _score_local_definition(
+            local, raw, binary, args, privileged, strict, introspect, depth, basedir, seen,
+            defs, offset)
+        if resolved:
+            return resolved
 
     rule = pick_rule(binary, args_str)
     factors = []
@@ -1683,9 +1855,19 @@ def _flag_deferred_exec(result, raw, downloaded):
                         "checksum: `echo '<sha256>  s.sh' | sha256sum -c`")
 
 
-def analyze(text, strict=False, introspect=False, basedir=".", _depth=0, _seen=None):
-    """Analyze a snippet; returns one result per command, in execution order."""
+def analyze(text, strict=False, introspect=False, basedir=".", _depth=0, _seen=None,
+            _defs=None, _at=None):
+    """Analyze a snippet; returns one result per command, in execution order.
+
+    `_defs` carries the enclosing text's function and alias definitions into a
+    resolved body, and `_at` pins every command in that body to the offset of
+    the call site — body offsets are body-relative and would otherwise be
+    compared against offsets in a different string. The call site is the right
+    point because bash resolves a name when the line runs, so a helper defined
+    below the one that calls it is still in scope.
+    """
     results = []
+    defs = _defs if _defs is not None else (collect_definitions(text) if introspect else [])
     if FORKBOMB.search(text):
         results.append({
             "command": text.strip().splitlines()[0][:60], "rule": "EXEC-FORKBOMB", "known": True,
@@ -1702,13 +1884,15 @@ def analyze(text, strict=False, introspect=False, basedir=".", _depth=0, _seen=N
         line = text.count("\n", 0, offset) + 1
         for inner, ioff in subshell_commands(raw, offset):
             r = score_command(inner, tokenize(inner), strict=strict, introspect=introspect,
-                              depth=max(1, _depth), basedir=basedir, seen=_seen)
+                              depth=max(1, _depth), basedir=basedir, seen=_seen, defs=defs,
+                              offset=_at if _at is not None else ioff)
             if r:
                 r["line"] = text.count("\n", 0, ioff) + 1
                 r["substitution"] = True
                 results.append(r)
         r = score_command(raw, tokenize(raw), strict=strict, introspect=introspect,
-                          depth=_depth, basedir=basedir, seen=_seen)
+                          depth=_depth, basedir=basedir, seen=_seen, defs=defs,
+                          offset=_at if _at is not None else offset)
         if not r:
             continue
         r["line"] = line

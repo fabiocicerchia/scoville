@@ -580,3 +580,127 @@ def test_json_is_unaffected_by_the_scale(capsys):
 def test_fail_on_still_works_with_peppers(capsys):
     assert main(["rm -rf /", "--scale", "peppers", "--fail-on", "high", "--quiet"]) == 1
     capsys.readouterr()
+
+
+# --- shell functions and aliases defined in the analysed text ---------------
+#
+# A helper defined in the script is a carrier like any other wrapper: the call
+# site shows nothing, and in a deploy script that defines its own functions
+# that is most of the interesting lines.
+
+FUNC_SCRIPT = """\
+alias k=kubectl
+deploy() { kubectl delete ns "$1"; kubectl apply -f manifests/; }
+deploy prod
+k delete ns prod
+"""
+
+
+def line(text, needle, **kw):
+    """The result for the command containing `needle`."""
+    for r in analyze(text, **kw):
+        if needle in r["command"]:
+            return r
+    raise AssertionError(f"no command matching {needle!r}")
+
+
+def test_a_function_call_is_scored_as_its_body():
+    call = line(FUNC_SCRIPT, "deploy prod", introspect=True)
+    assert call["level"] == "high"
+    assert call["scope"] == "cluster" and call["reversibility"] == "irreversible"
+    # The definition site is in the trace, so the reader can find the body.
+    assert "defined on line 2" in call["factors"][0]["why"]
+    assert "kubectl delete ns" in call["factors"][1]["why"]
+
+
+def test_an_alias_shadowing_a_binary_is_expanded():
+    call = line(FUNC_SCRIPT, "k delete ns prod", introspect=True)
+    # Scored as the kubectl command it really is, not as an unknown CLI.
+    assert call["level"] == "critical"
+    assert "resolved alias `k` is `kubectl`" in call["factors"][0]["why"]
+    assert "kubectl delete ns prod" in call["factors"][0]["why"]
+
+
+def test_resolution_is_opt_in():
+    # Without --introspect the tool scores exactly what it is shown. `deploy`
+    # is an unknown command and `k` an unknown CLI hitting the verb floor.
+    assert line(FUNC_SCRIPT, "deploy prod")["level"] == "low"
+    assert line(FUNC_SCRIPT, "k delete ns prod")["level"] == "high"
+    assert line(FUNC_SCRIPT, "deploy prod", introspect=True)["level"] == "high"
+
+
+def test_a_function_defined_after_the_call_is_not_applied():
+    # bash reads top to bottom: at line 1 `cleanup` is not a function yet, and
+    # scoring it as one would be a false positive on a very common layout.
+    text = 'cleanup prod\ncleanup() { rm -rf /var/lib/data; }\n'
+    call = line(text, "cleanup prod", introspect=True)
+    assert call["rule"] == "UNKNOWN"
+    assert call["level"] == "low"
+
+
+def test_the_last_definition_before_the_call_wins():
+    text = 'sync() { echo safe; }\nsync() { rm -rf /; }\nsync now\n'
+    call = line(text, "sync now", introspect=True)
+    assert "defined on line 2" in call["factors"][0]["why"]
+    assert call["level"] == "critical"
+
+
+def test_a_name_is_resolved_at_the_call_site_not_the_definition():
+    # `a` is defined above `b` but called below both, so `b` is in scope by the
+    # time `a` runs — resolving at definition time would miss the rm entirely.
+    text = 'a() { b; }\nb() { rm -rf /etc; }\na\n'
+    call = analyze(text, introspect=True)[-1]
+    assert call["command"] == "a"
+    assert call["level"] == "critical"
+
+
+def test_direct_recursion_terminates_and_still_scores_the_body():
+    text = 'loop() { loop; rm -rf /tmp/x; }\nloop\n'
+    results = analyze(text, introspect=True)
+    call = results[-1]
+    assert call["command"] == "loop"
+    # The recursive arm stops; the arm that does real work is still counted.
+    assert "rm -rf /tmp/x" in call["factors"][1]["why"]
+
+
+def test_mutual_recursion_terminates():
+    text = 'a() { b; }\nb() { a; rm -rf /etc; }\na\n'
+    results = analyze(text, introspect=True)  # must not hang or recurse away
+    assert results[-1]["level"] == "critical"
+
+
+def test_calling_the_same_helper_twice_scores_both_calls():
+    # The cycle guard is a call *stack*, not a visited set: a second, separate
+    # call is ordinary and must not be reported as recursion.
+    text = 'wipe() { rm -rf /var/lib/data; }\nwipe\nwipe\n'
+    results = [r for r in analyze(text, introspect=True) if r["command"] == "wipe"]
+    assert len(results) == 2
+    assert results[0]["score"] == results[1]["score"] > 0
+    assert all(r["rule"] == "CARRIER-FUNCTION" for r in results)
+
+
+def test_nothing_outside_the_analysed_text_is_read(tmp_path, monkeypatch):
+    # Reading ~/.bashrc would make the same script score differently on two
+    # machines, which is a worse answer than an unknown command.
+    bashrc = tmp_path / ".bashrc"
+    bashrc.write_text("alias deploy='rm -rf /'\n")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    call = line("deploy prod", "deploy prod", introspect=True)
+    assert call["rule"] == "UNKNOWN"
+    assert call["level"] == "low"
+
+
+def test_an_unterminated_function_body_is_skipped_not_half_scored():
+    text = 'broken() { rm -rf /\ndeploy prod\n'
+    # No closing brace: scoring half a body is worse than not resolving it.
+    assert line(text, "deploy prod", introspect=True)["rule"] == "UNKNOWN"
+
+
+def test_a_function_body_containing_braces_is_read_whole():
+    # `${VAR}` puts a brace pair inside the body. A non-greedy match to the
+    # first `}` would truncate here and silently under-report what runs.
+    text = 'go() { rm -rf "${TARGET}"/data; }\ngo\n'
+    call = analyze(text, introspect=True)[-1]
+    assert call["command"] == "go"
+    assert call["score"] > 0, "brace counting truncated the body"
+    assert "rm -rf" in call["factors"][1]["why"]

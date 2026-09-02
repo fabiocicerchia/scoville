@@ -64,7 +64,7 @@ Useful flags:
 | `--format json` | machine-readable, every factor included |
 | `--scale peppers` | name the bands after the peppers instead |
 | `--list-rules` | print the whole rule set |
-| `--why RULE` | the long form for one rule: what it matches, the incident class it prevents, why that band, and the related rules |
+| `--why RULE` | the long form for one rule: what it matches, why that band |
 
 Exit codes: `0` below threshold, `1` at or above `--fail-on`, `64` usage error.
 

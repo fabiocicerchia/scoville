@@ -815,7 +815,8 @@ RULES = [
       "reviewed yet, because sync does not care why HEAD moved",
       "`argocd app diff` prints what would change, and `--dry-run` runs it without applying",
       subsumes="PURGE-FLAG FORCE"),
-    R("ARGOCD-PROJ-DELETE", "argocd", r"^proj(ect)?\s+delete\b", 70, "cluster", "irreversible",
+    R("ARGOCD-PROJ-DELETE", "argocd", r"^(proj|project)\s+delete\b", 70, "cluster",
+      "irreversible",
       "deleting a project takes every application in it, and each of those cascades to its own "
       "cluster resources"),
     R("ARGOCD-CLUSTER-RM", "argocd", r"^cluster\s+rm\b", 45, "cluster", "recoverable",
@@ -2204,19 +2205,8 @@ def _related(entry):
     return same, beats
 
 
-def why_text(rid, width=78):
-    """The long form for one rule or amplifier, or None if the id is unknown.
-
-    Assembled from the rule table rather than written out twice: the band, the
-    scope, the reversibility and the reachable range are all facts the scorer
-    already uses, so this view cannot disagree with the score it explains. Only
-    the incident-class paragraph is prose, and it is optional — a rule without
-    one says so rather than padding.
-    """
-    kind, entry = entry_by_id(rid)
-    if not entry:
-        return None
-    out = []
+def _why_head(kind, entry, width):
+    """The identity line: what this is, and the three facts a score reports."""
     if kind == "rule":
         head = (f"{entry['id']}  ·  base {entry['base']} ({band(entry['base'])})  ·  "
                 f"scope: {entry['scope']}  ·  {entry['revert']}")
@@ -2226,93 +2216,119 @@ def why_text(rid, width=78):
         if entry["scope"] or entry["revert"]:
             head += (f"  ·  scope: {entry['scope'] or '—'}  ·  "
                      f"{entry['revert'] or '—'}")
-    out += [head, "=" * min(len(head), width), ""]
+    return [head, "=" * min(len(head), width), ""]
 
-    out.append("MATCHES")
-    bins = ", ".join(sorted(entry["bins"])) if entry["bins"] else "any command"
-    out.append(_wrap(bins))
+
+def _why_matches(kind, entry):
+    """What it matches, and — as importantly — what it does not."""
+    out = ["MATCHES"]
+    out.append(_wrap(", ".join(sorted(entry["bins"])) if entry["bins"] else "any command"))
     pattern = entry["sub"] if kind == "rule" else entry["pattern"]
     if pattern is not None:
         # Printed unwrapped: a regex broken across lines is not something you
         # can paste back into anything.
-        out.append("  …when the arguments match:")
-        out.append(f"    {pattern.pattern}")
+        out += ["  …when the arguments match:", f"    {pattern.pattern}"]
     elif kind == "rule":
         out.append(_wrap("…whatever the arguments are — the binary is the whole of it."))
-    if kind == "rule":
-        if entry["generic"]:
-            out.append(_wrap("This is a verb classifier: a floor for CLIs nobody has "
-                             "enumerated, and any specific rule beats it — including one "
-                             "that scores lower."))
-        else:
-            out.append(_wrap("Not matched: anything a rule with a higher base claims "
-                             "first. Specificity wins before score does."))
-    out.append("")
+    if kind == "rule" and entry["generic"]:
+        out.append(_wrap("This is a verb classifier: a floor for CLIs nobody has "
+                         "enumerated, and any specific rule beats it — including one "
+                         "that scores lower."))
+    elif kind == "rule":
+        out.append(_wrap("Not matched: anything a rule with a higher base claims first. "
+                         "Specificity wins before score does."))
+    return out + [""]
 
-    out.append("INCIDENT CLASS")
+
+def _why_incident(entry):
+    """The prose half, or an honest admission that it has not been written."""
+    out = ["INCIDENT CLASS"]
     note = INCIDENTS.get(entry["id"])
     if note:
-        out.append(_wrap(note))
-    else:
-        out.append(_wrap(f"Not written yet. The one-line reason is: {entry['why']}"))
-        out.append(_wrap("Everything above and below is derived from the rule table, so "
-                         "it is accurate — but the class of incident this rule exists to "
-                         "prevent has not been written down. That is a gap, not a "
-                         "judgement that the rule is uninteresting."))
+        return out + [_wrap(note), ""]
+    out.append(_wrap(f"Not written yet. The one-line reason is: {entry['why']}"))
+    out.append(_wrap("Everything above and below is derived from the rule table, so it is "
+                     "accurate — but the class of incident this rule exists to prevent has "
+                     "not been written down. That is a gap, not a judgement that the rule "
+                     "is uninteresting."))
+    return out + [""]
+
+
+def _why_band(entry, kind):
+    """Why this band, and what the flags on these binaries can do to it."""
+    out = ["WHY THIS BAND",
+           _wrap(f"{entry['base']}/100 on its own, which is `{band(entry['base'])}`. "
+                 f"Blast radius `{entry['scope']}`; getting back is `{entry['revert']}`.")]
+    amps, softs = _reachable(entry, kind)
+    if amps:
+        worst = max(amps, key=lambda x: x["points"])
+        reached = min(100, entry["base"] + worst["points"])
+        out.append("")
+        out.append(_wrap(f"Amplifiers registered for these binaries — each applies only "
+                         f"where its own pattern matches. The largest is "
+                         f"{worst['points']:+d} ({worst['id']}); where it applies, "
+                         f"{entry['base']} becomes {reached}/`{band(reached)}`."))
+        out += _why_modifiers(sorted(amps, key=lambda x: -x["points"])[:8])
+    if softs:
+        out.append("")
+        out.append(_wrap("Asking for it carefully scores below asking for it carelessly:"))
+        out += _why_modifiers(sorted(softs, key=lambda x: x["points"])[:6])
     out.append("")
+    out.append(_wrap("The generic signals — `--force`, `-y`, `--purge`, a credential in "
+                     "argv, disabled TLS or signature verification, `0.0.0.0/0`, a target "
+                     "that names production — apply on top of any command. "
+                     "`--list-rules` prints them."))
+    return out + [""]
 
+
+def _why_modifiers(entries):
+    return [_wrap(f"{a['points']:+d}  {a['id']}: {a['why']}", indent="    ", hang="     ")
+            for a in entries]
+
+
+def _why_safer(entry):
+    """The alternative, or a note that the rule owes one."""
+    if entry["advice"]:
+        body = entry["advice"]
+    elif entry["base"] >= 35:
+        body = ("No alternative recorded. For a rule at this level that is a gap in the "
+                "rule, not a statement that none exists.")
+    else:
+        body = "Nothing to avoid — this is not a destructive rule."
+    return ["SAFER", _wrap(body), ""]
+
+
+def _why_related(entry):
+    """Neighbours on the same binaries, and the classifiers this one beats."""
+    same, beats = _related(entry)
+    if not (same or beats):
+        return []
+    out = ["RELATED"]
+    out += [_wrap(f"{r['id']} ({r['base']}) — {r['why']}", indent="    ", hang="  ")
+            for r in sorted(same, key=lambda x: -x["base"])[:8]]
+    out += [_wrap(f"beats {r['id']} ({r['base']}), the verb classifier", indent="    ")
+            for r in beats]
+    return out + [""]
+
+
+def why_text(rid, width=78):
+    """The long form for one rule or amplifier, or None if the id is unknown.
+
+    Assembled from the rule table rather than written out twice: the band, the
+    scope, the reversibility and the reachable range are all facts the scorer
+    already uses, so this view cannot disagree with the score it explains. Only
+    the incident-class paragraph is prose, and it is optional — a rule without
+    one says so rather than padding.
+
+    One section per helper, in printed order, so a section can be read or
+    changed without the whole view in your head.
+    """
+    kind, entry = entry_by_id(rid)
+    if not entry:
+        return None
+    out = _why_head(kind, entry, width) + _why_matches(kind, entry) + _why_incident(entry)
     if kind == "rule":
-        out.append("WHY THIS BAND")
-        out.append(_wrap(f"{entry['base']}/100 on its own, which is `{band(entry['base'])}`. "
-                         f"Blast radius `{entry['scope']}`; getting back is "
-                         f"`{entry['revert']}`."))
-        amps, softs = _reachable(entry, kind)
-        if amps:
-            worst = max(amps, key=lambda x: x["points"])
-            reached = min(100, entry["base"] + worst["points"])
-            out.append("")
-            out.append(_wrap(f"Amplifiers registered for these binaries — each applies "
-                             f"only where its own pattern matches. The largest is "
-                             f"{worst['points']:+d} ({worst['id']}); where it applies, "
-                             f"{entry['base']} becomes {reached}/`{band(reached)}`."))
-            for a in sorted(amps, key=lambda x: -x["points"])[:8]:
-                out.append(_wrap(f"{a['points']:+d}  {a['id']}: {a['why']}",
-                                 indent="    ", hang="     "))
-        if softs:
-            out.append("")
-            out.append(_wrap("Asking for it carefully scores below asking for it "
-                             "carelessly:"))
-            for a in sorted(softs, key=lambda x: x["points"])[:6]:
-                out.append(_wrap(f"{a['points']:+d}  {a['id']}: {a['why']}",
-                                 indent="    ", hang="     "))
-        out.append("")
-        out.append(_wrap("The generic signals — `--force`, `-y`, `--purge`, a credential in "
-                         "argv, disabled TLS or signature verification, `0.0.0.0/0`, a "
-                         "target that names production — apply on top of any command. "
-                         "`--list-rules` prints them."))
-        out.append("")
-
-        out.append("SAFER")
-        if entry["advice"]:
-            out.append(_wrap(entry["advice"]))
-        elif entry["base"] >= 35:
-            out.append(_wrap("No alternative recorded. For a rule at this level that is "
-                             "a gap in the rule, not a statement that none exists."))
-        else:
-            out.append(_wrap("Nothing to avoid — this is not a destructive rule."))
-        out.append("")
-
-        same, beats = _related(entry)
-        if same or beats:
-            out.append("RELATED")
-            for r in sorted(same, key=lambda x: -x["base"])[:8]:
-                out.append(_wrap(f"{r['id']} ({r['base']}) — {r['why']}",
-                                 indent="    ", hang="  "))
-            for r in beats:
-                out.append(_wrap(f"beats {r['id']} ({r['base']}), the verb classifier",
-                                 indent="    "))
-            out.append("")
-
+        out += _why_band(entry, kind) + _why_safer(entry) + _why_related(entry)
     out.append(f"  scoville --list-rules   ·   {len(INCIDENTS)} of {len(rule_ids())} ids "
                "have an incident note")
     return "\n".join(out).rstrip() + "\n"

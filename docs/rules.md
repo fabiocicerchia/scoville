@@ -71,9 +71,16 @@ Verb classification is a floor. It cannot see what a resource is worth
 and it cannot see a verb that lies. So the CLIs where both the traffic and the
 blast radius are high are enumerated per resource instead:
 
-| enumerated per resource | carried by verb classification |
-| --- | --- |
-| `argocd` `ceph` `eksctl` `etcdctl` `flyctl`/`fly` `gh` `heroku` `nomad` `openstack` `pulumi` `rbd` `rclone` `restic`/`borg` `s3cmd` `snap` `vault` `velero` `virsh` `zfs` | everything else in `RESOURCE_CLIS` — `hcloud` `scw` `doctl` `linode-cli` `vultr-cli` `civo` `exo` `upcloud` `ibmcloud` `oci` `aliyun` `railway` `vercel` `netlify` `render` `pscale` `supabase` `wrangler` `glab` `tea` `flux` `linkerd` `istioctl` `incus` `lxc` `machinectl` `consul` `cdk` `cdktf` `serverless` `stripe` `twilio` `fastly` `akamai` `cf` and the rest |
+**Enumerated per resource** — `argocd`, `ceph`, `eksctl`, `etcdctl`,
+`flyctl`/`fly`, `gh`, `heroku`, `nomad`, `openstack`, `pulumi`, `rbd`,
+`rclone`, `restic`/`borg`, `s3cmd`, `snap`, `vault`, `velero`, `virsh`, `zfs`.
+
+**Carried by verb classification** — everything else in `RESOURCE_CLIS`:
+`hcloud`, `scw`, `doctl`, `linode-cli`, `vultr-cli`, `civo`, `exo`, `upcloud`,
+`ibmcloud`, `oci`, `aliyun`, `railway`, `vercel`, `netlify`, `render`,
+`pscale`, `supabase`, `wrangler`, `glab`, `tea`, `flux`, `linkerd`,
+`istioctl`, `incus`, `lxc`, `machinectl`, `consul`, `cdk`, `cdktf`,
+`serverless`, `stripe`, `twilio`, `fastly`, `akamai`, `cf`, and the rest.
 
 `specific_clis()` and `generic_clis()` compute those two lists from the rule set
 rather than from a hand-maintained table, and the suite asserts the split — so a
@@ -112,7 +119,7 @@ $ scoville 'openstack project delete acme'
 openstack project delete acme
   HIGH        60/100  ·  scope: account  ·  irreversible
      +60  deleting a project does not delete what is in it: the servers, …
-    ↳ safer: `openstack project purge --project <id>` removes the resources first
+    ↳ safer: `openstack project purge --project <id>` removes them first
     ↳ why:   scoville --why OS-PROJECT-DELETE
 ```
 

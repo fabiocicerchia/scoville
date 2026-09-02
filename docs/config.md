@@ -68,8 +68,8 @@ a considered decision or a Friday afternoon.
 
 1. **`deny`** — has to survive an `allow` written by someone who did not know
    about it.
-2. **`rescore`**
-3. **`allow`**
+1. **`rescore`**
+1. **`allow`**
 
 Within an operation, the first matching entry wins.
 

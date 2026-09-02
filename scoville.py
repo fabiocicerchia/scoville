@@ -2756,6 +2756,195 @@ def definition_at(defs, name, offset):
 PAYLOAD = "payload "
 ENTRYPOINT = "resolved entrypoint "
 WRAPPER = "resolved wrapper "
+RBAC = "rbac "
+
+# ------------------------------------------------------ kubernetes RBAC ---
+#
+# `kubectl delete ns prod` scores the same whether the current context is
+# cluster-admin on production or a read-only token that will be refused. The
+# second case is noise, and noise is what makes people stop reading the output.
+# scoville knows the command; it does not know the authorisation.
+#
+# `kubectl auth can-i` is a SelfSubjectAccessReview — a read that asks the API
+# server "would you allow this?" and changes nothing. That keeps the "nothing
+# is ever executed to score it" contract intact, but it is still a call to a
+# live cluster, so it lives behind --introspect with everything else that
+# leaves the machine.
+#
+# THE DIRECTION OF FAILURE IS THE WHOLE DESIGN. A dampener that fires on a bad
+# `can-i` result under-reports risk, which is the one kind of wrong answer this
+# tool must not give. So: nothing is dampened unless a refusal is POSITIVELY
+# established. A timeout, a missing kubeconfig, an unreachable cluster and an
+# answer this code cannot parse all mean "no opinion", and no opinion scores
+# exactly as it does today.
+
+KUBE_BINS = ("kubectl", "oc", "k")
+
+# Timeout for one `can-i`. Bounded because this runs once per kubectl line, and
+# a script full of them must not turn a score into a network wait.
+KUBE_TIMEOUT_DEFAULT = 3.0
+
+# Verbs whose kubectl spelling differs from the RBAC verb. Everything else is
+# passed through, because the RBAC verb list is open — a CRD can define its own.
+KUBE_VERB_ALIASES = {
+    "apply": "patch", "edit": "patch", "set": "patch", "annotate": "patch",
+    "label": "patch", "scale": "patch", "rollout": "patch", "autoscale": "patch",
+    "run": "create", "expose": "create", "cordon": "patch", "drain": "patch",
+    "uncordon": "patch", "taint": "patch", "exec": "create",
+    "port-forward": "create", "cp": "create", "attach": "create",
+    "describe": "get", "logs": "get", "top": "get", "wait": "get",
+}
+
+# kubectl's own short forms for the resources most worth knowing about. Not a
+# complete table and not meant to be: an unrecognised resource is passed to
+# `can-i` verbatim, which is the component that actually knows the API surface.
+KUBE_RESOURCE_ALIASES = {
+    "ns": "namespaces", "po": "pods", "deploy": "deployments", "svc": "services",
+    "cm": "configmaps", "sts": "statefulsets", "ds": "daemonsets", "rs": "replicasets",
+    "pv": "persistentvolumes", "pvc": "persistentvolumeclaims", "sa": "serviceaccounts",
+    "no": "nodes", "ing": "ingresses", "crd": "customresourcedefinitions",
+    "secret": "secrets", "job": "jobs", "cj": "cronjobs",
+}
+
+# Flags that take a separate value, so the token after them is not a verb or a
+# resource. `-n prod` is the one that matters; the rest are here so a long
+# command line does not shift the parse by one.
+KUBE_VALUE_FLAGS = {
+    "-n", "--namespace", "--context", "--cluster", "--user", "--kubeconfig",
+    "-f", "--filename", "-l", "--selector", "-o", "--output", "--server",
+    "--token", "--as", "--as-group", "-c", "--container", "--field-selector",
+}
+
+
+def _kubectl(binary, args, timeout):
+    """Run one read-only kubectl subcommand and return stdout, or None.
+
+    Same collapse as _docker: a missing binary, a timeout, a non-zero exit and
+    an OS error are all "no answer" to the caller, and no answer must never
+    become a dampener.
+    """
+    exe = shutil.which(binary)
+    if not exe:
+        return None
+    try:
+        r = subprocess.run([exe, *args], capture_output=True, text=True,
+                           timeout=timeout, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    # `can-i` exits 1 for "no" and prints "no", so stdout is read on both exit
+    # codes and the caller reads the word, not the status.
+    return (r.stdout or "").strip()
+
+
+def kube_target(args):
+    """(verb, resource, namespace) for a kubectl command line, or (None, ...).
+
+    Positional-only: the first two non-flag tokens. Enough for the commands
+    worth scoring, and it declines rather than guesses on anything else.
+    """
+    verb = resource = namespace = None
+    positional = []
+    skip = False
+    for i, a in enumerate(args):
+        if skip:
+            if namespace is None and args[i - 1] in ("-n", "--namespace"):
+                namespace = a
+            skip = False
+            continue
+        if a == "--":
+            break
+        if a.startswith("--") and "=" in a:
+            k, v = a.split("=", 1)
+            if k in ("-n", "--namespace"):
+                namespace = v
+            continue
+        if a in KUBE_VALUE_FLAGS:
+            skip = True
+            continue
+        if a.startswith("-"):
+            continue
+        positional.append(a)
+    if positional:
+        verb = positional[0]
+    if len(positional) > 1:
+        # `delete pod/foo` and `delete pods foo` both mean pods.
+        resource = positional[1].split("/", 1)[0]
+    return verb, resource, namespace
+
+
+def kube_context(binary, timeout):
+    """The context name `can-i` will be answered by, or None.
+
+    A local kubeconfig read, not a cluster call — but if there is no context
+    there is nothing to ask, which is the cheapest way to skip the network.
+    """
+    out = _kubectl(binary, ["config", "current-context"], timeout)
+    return out or None
+
+
+def kube_can_i(binary, verb, resource, namespace, timeout):
+    """True / False / None for "may this context do that".
+
+    None is not a third state to act on — it is the absence of an answer, and
+    every caller treats it as "score exactly as before".
+    """
+    cmd = ["auth", "can-i", verb, resource]
+    if namespace:
+        cmd += ["-n", namespace]
+    out = _kubectl(binary, cmd, timeout)
+    if out is None:
+        return None
+    first = out.splitlines()[0].strip().lower() if out else ""
+    if first.startswith("yes"):
+        return True
+    if first.startswith("no"):
+        return False
+    return None
+
+
+def kube_rbac_factors(binary, args, timeout=KUBE_TIMEOUT_DEFAULT):
+    """Fold the cluster's own answer in as scoring factors.
+
+    Returns a list of factor tuples. Empty means "nothing to say", which is
+    also what every failure returns.
+    """
+    verb, resource, ns = kube_target(args)
+    if not verb or not resource:
+        return []
+    ctx = kube_context(binary, timeout)
+    if not ctx:
+        return []
+    rbac_verb = KUBE_VERB_ALIASES.get(verb, verb)
+    rbac_res = KUBE_RESOURCE_ALIASES.get(resource, resource)
+    where = f" in {ns}" if ns else ""
+
+    allowed = kube_can_i(binary, rbac_verb, rbac_res, ns, timeout)
+    if allowed is False:
+        # The one dampener. Deliberately points rather than a cap: the context
+        # is read NOW and the command may run later against a different one,
+        # which is why the factor names the context it asked.
+        return [(-30, (f"{RBAC}context `{ctx}` cannot {rbac_verb} {rbac_res}{where} — "
+                       f"`kubectl auth can-i` says no, so this would be refused as it "
+                       f"stands. Scored down, not to zero: the context is read now and "
+                       f"the command may run later against another one"),
+                 None, None, "RBAC-REFUSED")]
+    if allowed is None:
+        return [(0, (f"{RBAC}no answer from `kubectl auth can-i {rbac_verb} {rbac_res}"
+                     f"{where}` (context `{ctx}`) — scored as if it had not been asked"),
+                 None, None, "RBAC-UNKNOWN")]
+
+    # Permitted. Worth a factor only where it changes the reading: being able to
+    # do everything, everywhere, is the difference between "this deletes a
+    # namespace" and "this deletes a namespace and nothing will stop it".
+    admin = kube_can_i(binary, "*", "*", None, timeout)
+    if admin is True:
+        return [(10, (f"{RBAC}context `{ctx}` is cluster-admin (`can-i '*' '*'` says yes): "
+                      f"nothing in the cluster refuses this, and there is no RBAC boundary "
+                      f"left to catch a mistake"),
+                 "cluster", None, "RBAC-CLUSTER-ADMIN")]
+    return [(0, (f"{RBAC}context `{ctx}` may {rbac_verb} {rbac_res}{where} — "
+                 f"`kubectl auth can-i` says yes"), None, None, "RBAC-PERMITTED")]
+
 
 
 def path_factors(binary, args):
@@ -2930,7 +3119,7 @@ def _factor(f):
 
 
 def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=".",
-                  seen=None, defs=None, offset=0):
+                  seen=None, defs=None, offset=0, kube_timeout=KUBE_TIMEOUT_DEFAULT):
     """Score one command. Returns a result dict; recurses into payloads."""
     rest, privileged, wrappers = strip_prefix(tokens)
     if not rest:
@@ -3064,6 +3253,11 @@ def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=
             why += (" — re-run with --introspect to read it" if not introspect
                     else ", and it could not be read from here")
             factors.append((20, why, None, None))
+
+    # What the cluster itself says. Only under --introspect, and only for a
+    # kubectl line: everything here is a call to a live API server.
+    if introspect and binary in KUBE_BINS:
+        factors.extend(kube_rbac_factors(binary, args, kube_timeout))
 
     # dampeners
     dry = None
@@ -3260,7 +3454,7 @@ def _flag_deferred_exec(result, raw, downloaded):
 
 
 def analyze(text, strict=False, introspect=False, basedir=".", _depth=0, _seen=None,
-            _defs=None, _at=None):
+            _defs=None, _at=None, kube_timeout=KUBE_TIMEOUT_DEFAULT):
     """Analyze a snippet; returns one result per command, in execution order.
 
     `_defs` carries the enclosing text's function and alias definitions into a
@@ -3289,14 +3483,16 @@ def analyze(text, strict=False, introspect=False, basedir=".", _depth=0, _seen=N
         for inner, ioff in subshell_commands(raw, offset):
             r = score_command(inner, tokenize(inner), strict=strict, introspect=introspect,
                               depth=max(1, _depth), basedir=basedir, seen=_seen, defs=defs,
-                              offset=_at if _at is not None else ioff)
+                              offset=_at if _at is not None else ioff,
+                              kube_timeout=kube_timeout)
             if r:
                 r["line"] = text.count("\n", 0, ioff) + 1
                 r["substitution"] = True
                 results.append(r)
         r = score_command(raw, tokenize(raw), strict=strict, introspect=introspect,
                           depth=_depth, basedir=basedir, seen=_seen, defs=defs,
-                          offset=_at if _at is not None else offset)
+                          offset=_at if _at is not None else offset,
+                          kube_timeout=kube_timeout)
         if not r:
             continue
         r["line"] = line
@@ -3590,7 +3786,12 @@ def main(argv=None):
     p.add_argument("--strict", action="store_true",
                    help="treat unrecognised commands as medium risk")
     p.add_argument("--introspect", action="store_true",
-                   help="resolve hidden image/container entrypoints via read-only docker inspect")
+                   help="resolve hidden image/container entrypoints via read-only docker inspect, "
+                        "and ask the current kube context what it is allowed to do")
+    p.add_argument("--kube-timeout", type=float, default=KUBE_TIMEOUT_DEFAULT, metavar="SEC",
+                   help="bound on one `kubectl auth can-i` call under --introspect "
+                        f"(default {KUBE_TIMEOUT_DEFAULT}); a timeout scores as if it had not "
+                        "been asked")
     p.add_argument("--quiet", "-q", action="store_true", help="one line per command")
     p.add_argument("--verbose", "-v", action="store_true", help="show zero-weight factors too")
     p.add_argument("--no-color", action="store_true",
@@ -3675,7 +3876,8 @@ def main(argv=None):
                 return 64
 
     results = apply_overrides(
-        analyze(text, strict=args.strict, introspect=args.introspect, basedir=basedir),
+        analyze(text, strict=args.strict, introspect=args.introspect, basedir=basedir,
+                kube_timeout=args.kube_timeout),
         entries)
     summary = overall(results)
 

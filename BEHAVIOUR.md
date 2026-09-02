@@ -195,6 +195,31 @@ Local definitions have three rules of their own:
 Paths resolve against the directory of the file passed to `-f`, or the current
 working directory otherwise.
 
+### Kubernetes RBAC
+
+Under `--introspect`, a `kubectl` line is also checked against the context that
+would run it, with `kubectl auth can-i` — a `SelfSubjectAccessReview`, which
+asks the API server *would you allow this* and creates, changes and runs
+nothing.
+
+| what `can-i` said | effect |
+| --- | --- |
+| `no` | **−30**, and the factor names the context it asked |
+| `yes`, and `can-i '*' '*'` also `yes` | **+10**, scope widened to `cluster` |
+| `yes` | no change, recorded in the trace |
+| nothing usable — no context, timeout, unreachable, unparseable | **no change**, recorded as "no answer" |
+
+The last row is the rule: **nothing is dampened unless a refusal is positively
+established**, because a dampener that fires on a failed check under-reports
+risk. `--kube-timeout` bounds one call, and a timeout is "no answer".
+
+The refusal is points, not a cap: the context is read now and the command may
+run later against a different one, which is also why the factor names it.
+Verbs are mapped to the RBAC verbs they need (`apply` → `patch`) and short
+resource names expanded (`ns` → `namespaces`) before the question is asked; an
+unrecognised resource is passed through verbatim, because the RBAC resource
+list is open.
+
 ---
 
 ## Remote code
@@ -389,3 +414,8 @@ that a backup two lines earlier changes what a `DROP TABLE` costs.
 `--introspect` reads a wrapper at analysis time. What actually runs later may
 differ — the file can change, and `$PATH` decides which `foo.sh` is found. It
 resolves what it can see from where it is run.
+
+The same applies to the cluster: the kube context is read at scoring time and
+the command may run later under a different one, or with a token that has been
+re-bound since. An RBAC factor is evidence about *this* context, named in the
+factor for exactly that reason — it is never a guarantee about the run.

@@ -87,6 +87,58 @@ docker run acme/importer:1.2
       +8  the image runs as root
 ```
 
+## Asking the cluster what it will allow
+
+`kubectl delete ns prod` scores the same whether the current context is
+cluster-admin on production or a read-only token that will be refused. The
+second case is noise, and noise is what makes people stop reading the output.
+
+Under `--introspect`, a `kubectl` line is checked against the context that
+would actually run it:
+
+```console
+$ scoville 'kubectl delete ns prod'
+kubectl delete ns prod
+  CRITICAL   90/100  ·  scope: cluster  ·  irreversible
+
+$ scoville 'kubectl delete ns prod' --introspect      # read-only token
+kubectl delete ns prod
+  HIGH       60/100  ·  scope: cluster  ·  irreversible
+     -30  rbac context `prod-readonly` cannot delete namespaces — `kubectl auth
+          can-i` says no, so this would be refused as it stands
+```
+
+`kubectl auth can-i` is a `SelfSubjectAccessReview`: the API server is asked
+*would you allow this*, and nothing is created, changed or run. That keeps the
+"nothing is ever executed to score it" contract intact. It is still a call to a
+live cluster, so it sits behind `--introspect` with everything else that leaves
+the machine, and `--kube-timeout` bounds one call.
+
+### The direction of failure is the whole design
+
+A dampener that fires on a bad `can-i` result **under-reports risk**, which is
+the one kind of wrong answer this tool must not give. So nothing is dampened
+unless a refusal is positively established:
+
+| what happened | what it scores |
+| --- | --- |
+| `can-i` says `no` | −30, with the context named |
+| `can-i` says `yes` **and** `can-i '*' '*'` says `yes` | +10, scope widened to `cluster` — nothing left to catch a mistake |
+| `can-i` says `yes` | unchanged, recorded in the trace |
+| no kubeconfig, no context, timeout, unreachable cluster, unparseable answer | **unchanged**, recorded as "no answer" |
+
+The refusal is points rather than a cap (which is what `--dry-run` gets),
+because the context is read **now** and the command may run later against a
+different one. That is also why the factor text names the context it asked:
+a −30 that does not say whose permissions it checked is not reviewable.
+
+`kubectl`'s verbs are mapped to the RBAC verbs they actually need before the
+question is asked — `apply`, `edit`, `scale` and `annotate` all need `patch`,
+and asking about `apply` gets a useless answer. Short resource names are
+expanded the same way. An *unrecognised* resource is passed through verbatim:
+the RBAC resource list is open, a CRD defines its own, and this table must not
+be the thing that decides what exists.
+
 ## Decisions
 
 **Two facets, not one number.** Scope and reversibility answer different

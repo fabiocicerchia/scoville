@@ -120,9 +120,9 @@ $ scoville --help
 usage: scoville [-h] [-f FILE] [--format {text,json}]
                 [--scale {bands,peppers}]
                 [--fail-on {safe,low,medium,high,critical}] [--strict]
-                [--introspect] [--quiet] [--verbose] [--no-color]
-                [--config PATH] [--no-config] [--list-rules] [--why RULE]
-                [--version]
+                [--introspect] [--kube-timeout SEC] [--quiet]
+                [--verbose] [--no-color] [--config PATH] [--no-config]
+                [--list-rules] [--why RULE] [--version]
                 [command ...]
 
 positional arguments:
@@ -139,8 +139,12 @@ options:
   --fail-on {safe,low,medium,high,critical}
                         exit 1 when any command reaches this level
   --strict              treat unrecognised commands as medium risk
-  --introspect          resolve hidden image/container entrypoints via read-
-                        only docker inspect
+  --introspect          resolve hidden image/container entrypoints via
+                        read-only docker inspect, and ask the current
+                        kube context what it is allowed to do
+  --kube-timeout SEC    bound on one `kubectl auth can-i` call under
+                        --introspect (default 3.0); a timeout scores
+                        as if it had not been asked
   --quiet, -q           one line per command
   --verbose, -v         show zero-weight factors too
   --no-color            never colourise (a non-tty and NO_COLOR already
@@ -193,6 +197,15 @@ script, an image `ENTRYPOINT`. `--introspect` reads them — resolving `foo.sh`,
 read-only `docker inspect` calls, recursively, with a cycle guard. Nothing is
 ever executed. Reading resolves uncertainty in *both* directions: a wrapper that
 turns out to run `ls` scores lower once it has been read, not higher.
+
+`--introspect` also asks the cluster. `kubectl delete ns prod` scores the same
+whether the current context is cluster-admin on production or a read-only token
+that will be refused — so under `--introspect` scoville runs `kubectl auth
+can-i` (a read-only `SelfSubjectAccessReview`) and folds the answer in: a
+refusal dampens the score and names the context, cluster-admin amplifies it.
+**No answer never dampens** — a timeout, a missing kubeconfig or an unreachable
+cluster all score exactly as they do today, because a dampener that fires on a
+failed check under-reports risk.
 
 More in [`docs/architecture.md`](docs/architecture.md).
 

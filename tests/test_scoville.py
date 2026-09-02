@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+import scoville
 from scoville import (
     INCIDENTS,
     RULES,
@@ -12,6 +13,7 @@ from scoville import (
     entry_by_id,
     find_config,
     generic_clis,
+    kube_target,
     load_config,
     main,
     overall,
@@ -1090,3 +1092,171 @@ def test_a_factor_that_is_not_a_rule_carries_no_made_up_id(capsys):
     assert any(f["rule"] == "FS-RM" for f in factors)
     # Path and payload factors are derived, not rules. None, not a fiction.
     assert any(f["rule"] is None for f in factors)
+
+
+# ------------------------------------------------------ kubernetes RBAC ---
+#
+# Every one of these stubs `_kubectl`, so no cluster is ever contacted. The
+# stub records what was asked, because "did it ask at all" is half of what
+# these are checking: the default path must make no network call whatsoever.
+
+
+class FakeKubectl:
+    """Stands in for the kubectl binary. `answers` maps a joined argv to stdout;
+    anything not listed returns None, which is the "no answer" case."""
+
+    def __init__(self, answers):
+        self.answers = answers
+        self.calls = []
+
+    def __call__(self, binary, args, timeout):
+        self.calls.append(" ".join(args))
+        self.timeout = timeout
+        return self.answers.get(" ".join(args))
+
+
+@pytest.fixture
+def kubectl(monkeypatch):
+    def install(answers):
+        fake = FakeKubectl(answers)
+        monkeypatch.setattr(scoville, "_kubectl", fake)
+        return fake
+
+    return install
+
+
+CTX = {"config current-context": "prod-readonly"}
+
+
+def test_the_default_path_never_talks_to_a_cluster(kubectl):
+    fake = kubectl({**CTX, "auth can-i delete namespaces": "yes"})
+    one("kubectl delete ns prod")  # no --introspect
+    assert fake.calls == [], "scoring a kubectl line made a cluster call by default"
+
+
+def test_a_command_the_context_cannot_run_is_dampened_and_says_so(kubectl):
+    kubectl({**CTX, "auth can-i delete namespaces -n prod": "no"})
+    loud = one("kubectl delete ns prod -n prod")
+    quiet = one("kubectl delete ns prod -n prod", introspect=True)
+    assert quiet["score"] < loud["score"], "a refused command scored the same as a permitted one"
+    why = " ".join(f["why"] for f in quiet["factors"])
+    # The factor has to name the context it asked, because the command may run
+    # later against a different one.
+    assert "prod-readonly" in why and "can-i" in why
+
+
+def test_a_refusal_scores_down_but_never_to_nothing(kubectl):
+    kubectl({**CTX, "auth can-i delete namespaces": "no"})
+    r = one("kubectl delete ns prod", introspect=True)
+    assert r["score"] > 0, "a refusal erased the command instead of discounting it"
+
+
+def test_cluster_admin_is_an_amplifier_on_a_destructive_verb(kubectl):
+    kubectl({
+        "config current-context": "kind-kind",
+        "auth can-i delete namespaces": "yes",
+        "auth can-i * *": "yes",
+    })
+    plain = one("kubectl delete ns prod")
+    admin = one("kubectl delete ns prod", introspect=True)
+    assert admin["score"] > plain["score"]
+    assert admin["scope"] == "cluster"
+    assert "cluster-admin" in " ".join(f["why"] for f in admin["factors"])
+
+
+def test_permitted_but_not_admin_changes_nothing_and_says_why(kubectl):
+    kubectl({
+        "config current-context": "team-ns",
+        "auth can-i delete namespaces": "yes",
+        "auth can-i * *": "no",
+    })
+    plain = one("kubectl delete ns prod")
+    known = one("kubectl delete ns prod", introspect=True)
+    assert known["score"] == plain["score"]
+    assert "says yes" in " ".join(f["why"] for f in known["factors"])
+
+
+# --- failing closed: the direction that matters -----------------------------
+
+
+@pytest.mark.parametrize("answers", [
+    {},                                             # no kubeconfig, no context
+    {**CTX},                                        # context, but can-i never answers
+    {**CTX, "auth can-i delete namespaces": ""},    # empty answer
+    {**CTX, "auth can-i delete namespaces": "error: You must be logged in"},
+    {**CTX, "auth can-i delete namespaces": "maybe"},
+])
+def test_no_answer_never_dampens(kubectl, answers):
+    """A dampener that fires on a bad result under-reports risk, which is the
+    one kind of wrong answer this tool must not give."""
+    kubectl(answers)
+    plain = one("kubectl delete ns prod")
+    quiet = one("kubectl delete ns prod", introspect=True)
+    assert quiet["score"] >= plain["score"], f"{answers} produced a dampener"
+
+
+def test_an_unanswered_check_is_still_recorded_in_the_trace(kubectl):
+    kubectl({**CTX})
+    r = one("kubectl delete ns prod", introspect=True)
+    why = " ".join(f["why"] for f in r["factors"])
+    assert "no answer" in why and "prod-readonly" in why
+
+
+def test_the_timeout_is_bounded_and_configurable(kubectl):
+    fake = kubectl({**CTX, "auth can-i delete namespaces": "no"})
+    analyze("kubectl delete ns prod", introspect=True, kube_timeout=0.25)
+    assert fake.timeout == 0.25
+
+
+# --- parsing the command line ----------------------------------------------
+
+
+@pytest.mark.parametrize("cmd,want", [
+    ("delete ns prod", ("delete", "ns", None)),
+    ("delete pod/foo", ("delete", "pod", None)),
+    ("-n kube-system delete deploy x", ("delete", "deploy", "kube-system")),
+    ("delete deploy x --namespace=prod", ("delete", "deploy", "prod")),
+    ("get pods -o json", ("get", "pods", None)),
+    ("exec -n prod mypod -- rm -rf /", ("exec", "mypod", "prod")),
+    ("version", ("version", None, None)),
+    ("", (None, None, None)),
+])
+def test_the_verb_and_resource_come_from_the_positionals(cmd, want):
+    assert kube_target(cmd.split()) == want
+
+
+def test_a_flag_value_is_not_mistaken_for_the_resource():
+    # `-l app=x` between the verb and the resource is the parse that shifts by
+    # one and asks the cluster about the wrong thing.
+    assert kube_target(["delete", "-l", "app=x", "pods"]) == ("delete", "pods", None)
+
+
+def test_kubectl_verbs_are_mapped_to_the_rbac_verbs_they_need(kubectl):
+    # `apply` is not an RBAC verb; asking for it gets a useless answer.
+    fake = kubectl({"config current-context": "c", "auth can-i patch deployments": "yes",
+                    "auth can-i * *": "no"})
+    one("kubectl apply deploy web", introspect=True)
+    assert "auth can-i patch deployments" in fake.calls
+
+
+def test_a_short_resource_name_is_expanded_before_it_is_asked_about(kubectl):
+    fake = kubectl({"config current-context": "c", "auth can-i delete namespaces": "yes",
+                    "auth can-i * *": "no"})
+    one("kubectl delete ns prod", introspect=True)
+    assert "auth can-i delete namespaces" in fake.calls
+
+
+def test_an_unknown_resource_is_passed_through_verbatim(kubectl):
+    # The RBAC resource list is open — a CRD defines its own — so this code
+    # must not be the thing that decides what exists.
+    fake = kubectl({"config current-context": "c", "auth can-i delete widgets.example.com": "no"})
+    r = one("kubectl delete widgets.example.com w1", introspect=True)
+    assert "auth can-i delete widgets.example.com" in fake.calls
+    assert "cannot delete widgets.example.com" in " ".join(f["why"] for f in r["factors"])
+
+
+def test_only_kubectl_lines_are_checked(kubectl):
+    fake = kubectl({**CTX})
+    one("rm -rf /etc", introspect=True)
+    one("docker rm -f web", introspect=True)
+    assert fake.calls == []

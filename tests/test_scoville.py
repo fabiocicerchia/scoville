@@ -7,14 +7,18 @@ from scoville import (
     analyze,
     apply_overrides,
     band,
+    entry_by_id,
     find_config,
     generic_clis,
     load_config,
     main,
     overall,
+    rule_ids,
     specific_clis,
     split_commands,
+    why_text,
 )
+from scoville import INCIDENTS, RULES
 
 
 def one(cmd, **kw):
@@ -968,3 +972,120 @@ def test_vault_output_curl_string_sends_nothing():
 def test_a_negated_cascade_is_not_a_purge():
     # `--cascade=false` names the purge flag and asks for the opposite.
     assert score("argocd app delete api --cascade=false") < score("argocd app delete api")
+
+
+# --- --why: the reasoning behind a score, one command away ------------------
+
+
+def test_every_id_has_a_why_body():
+    """The acceptance test from the issue. A rule that can produce a finding
+    and prints a blank detail view is worse than one that admits the note is
+    missing, so an empty body fails here rather than reaching a user."""
+    for rid in rule_ids():
+        body = why_text(rid)
+        assert body, f"{rid}: no --why body"
+        assert body.strip(), f"{rid}: blank --why body"
+        assert rid in body, f"{rid}: body does not name the rule"
+        assert "MATCHES" in body and "INCIDENT CLASS" in body, f"{rid}: missing a section"
+
+
+def test_a_rule_scoring_at_all_explains_its_band_and_its_alternative():
+    for rid in [r["id"] for r in RULES if r["base"] >= 35]:
+        body = why_text(rid)
+        assert "WHY THIS BAND" in body, rid
+        assert "SAFER" in body, rid
+
+
+def test_the_derived_view_cannot_disagree_with_the_score():
+    """Everything except the incident paragraph is read out of the rule table,
+    so the explanation and the scorer are the same facts. A view written by
+    hand would drift the first time a base moved."""
+    for r in RULES:
+        head = why_text(r["id"]).splitlines()[0]
+        assert f"base {r['base']}" in head, r["id"]
+        assert f"scope: {r['scope']}" in head, r["id"]
+        assert r["revert"] in head, r["id"]
+
+
+def test_a_rule_with_no_incident_note_says_so_rather_than_padding():
+    missing = [r["id"] for r in RULES if r["id"] not in INCIDENTS]
+    assert missing, "if every rule has a note, delete this test and celebrate"
+    body = why_text(missing[0])
+    assert "Not written yet" in body
+    # ...and still carries the one-line reason, so the view is never useless.
+    entry = entry_by_id(missing[0])[1]
+    assert entry["why"].split(":")[0][:30] in body
+
+
+def test_incident_notes_cannot_name_a_rule_that_does_not_exist():
+    """The drift the issue was worried about, made into a test: the notes live
+    beside the table rather than in it, and this is what keeps them tied."""
+    unknown = set(INCIDENTS) - set(rule_ids())
+    assert not unknown, f"incident notes for ids that no longer exist: {sorted(unknown)}"
+
+
+def test_incident_note_coverage_does_not_regress():
+    # A floor, not a target. Raise it when notes are added; it exists so a
+    # refactor cannot quietly drop them.
+    assert len(INCIDENTS) >= 126
+
+
+def test_incident_notes_are_prose_not_placeholders():
+    for rid, note in INCIDENTS.items():
+        assert len(note) > 180, f"{rid}: too short to be an incident class"
+        assert note.strip().endswith((".", "!")), f"{rid}: unfinished sentence"
+
+
+def test_why_accepts_an_amplifier_id_in_the_spelling_list_rules_prints():
+    """--list-rules prints amplifiers with a leading `+`, so both spellings
+    have to resolve — nobody should have to know which half of the table an id
+    came from."""
+    assert why_text("+FORCE") == why_text("FORCE")
+    assert why_text("force") == why_text("FORCE")
+    assert "amplifier" in why_text("FORCE")
+    assert "softener" in why_text("INTERACTIVE")
+
+
+def test_an_unknown_id_exits_64_and_suggests_a_near_miss(capsys):
+    assert main(["--why", "K8S-DELETE-NAMESPACE"]) == 64
+    err = capsys.readouterr().err
+    assert "K8S-DELETE-NS" in err
+
+
+def test_an_id_with_no_near_miss_points_at_list_rules(capsys):
+    assert main(["--why", "zzzzzzzz"]) == 64
+    assert "--list-rules" in capsys.readouterr().err
+
+
+def test_a_finding_names_the_rule_so_why_is_discoverable(capsys):
+    main(["kubectl delete ns prod"])
+    out = capsys.readouterr().out
+    assert "scoville --why K8S-DELETE-NS" in out
+
+
+def test_a_safe_command_keeps_the_pointer_out_of_the_way(capsys):
+    main(["ls -la"])
+    assert "--why" not in capsys.readouterr().out
+    main(["ls -la", "-v"])
+    assert "--why READ" in capsys.readouterr().out
+
+
+def test_json_carries_the_rule_id_on_every_factor_that_has_one(capsys):
+    main(["kubectl delete ns prod --all", "--format", "json"])
+    result = json.loads(capsys.readouterr().out)
+    factors = result["commands"][0]["factors"]
+    ids = [f["rule"] for f in factors]
+    assert "K8S-DELETE-NS" in ids and "K8S-ALL" in ids and "PROD-HINT" in ids
+    # And every id it emits has to resolve, or the pointer is a dead end.
+    for rid in ids:
+        if rid and rid != "UNKNOWN":
+            assert why_text(rid), rid
+
+
+def test_a_factor_that_is_not_a_rule_carries_no_made_up_id(capsys):
+    main(["rm -rf /etc", "--format", "json"])
+    result = json.loads(capsys.readouterr().out)
+    factors = result["commands"][0]["factors"]
+    assert any(f["rule"] == "FS-RM" for f in factors)
+    # Path and payload factors are derived, not rules. None, not a fiction.
+    assert any(f["rule"] is None for f in factors)

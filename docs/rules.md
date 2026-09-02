@@ -102,8 +102,52 @@ scores lower**:
 - `gh api -X DELETE /repos/{owner}/{repo}` deletes a repository, and nothing in
   the command line is a destructive verb.
 
+## The reasoning behind a rule
+
+Every finding names the rule that produced it, and `scoville --why <ID>` prints
+the long form for that rule:
+
+```console
+$ scoville 'openstack project delete acme'
+openstack project delete acme
+  HIGH        60/100  ·  scope: account  ·  irreversible
+     +60  deleting a project does not delete what is in it: the servers, …
+    ↳ safer: `openstack project purge --project <id>` removes the resources first
+    ↳ why:   scoville --why OS-PROJECT-DELETE
+```
+
+The detail view carries what it matches and what it deliberately does not, the
+class of incident it exists to prevent, why the band, scope and reversibility
+are what they are, the safer alternative, and the related rules — including the
+generic ones it beats. It also accepts amplifier ids in the `+FORCE` spelling
+`--list-rules` prints, so an id copied out of any output resolves.
+
+Everything except the incident paragraph is **read out of the rule table**, so
+the explanation and the score are the same facts and cannot drift apart. The
+incident paragraph is prose and is written per rule; a rule that does not have
+one yet says so plainly rather than printing a formulaic body, because a body
+people learn to skip is worse than an honest gap.
+
+An unknown id exits `64` and guesses:
+
+```console
+$ scoville --why K8S-DELETE-NAMESPACE
+scoville: no rule or amplifier called 'K8S-DELETE-NAMESPACE'
+scoville: did you mean K8S-DELETE-NS, K8S-DELETE-PVC, K8S-DELETE-POD?
+```
+
+`--format json` carries the rule id on every factor that has one, so a gate can
+link straight to the reasoning for the factor that failed it. Factors that are
+not a rule — a path, a carried payload, a dry-run dampener — carry `null`
+rather than an invented id.
+
 ## Growing the set
 
 The rule set *is* the product; it is meant to grow. Every rule carries a
 plain-language *why*, and destructive ones carry a safer alternative — a finding
 with neither is a finding people learn to ignore.
+
+A new rule ideally carries an incident-class note for `--why` as well. The notes
+live next to the rule table in `scoville.py`, keyed by rule id, and the suite
+fails if one names an id that no longer exists — so they cannot drift the way a
+separate document would.

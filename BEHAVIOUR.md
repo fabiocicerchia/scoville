@@ -277,9 +277,23 @@ alternative where one exists. `--scale peppers` renames the bands
 `--verbose` also shows zero-weight factors; `--format json` emits `overall` plus
 one object per command with `score`, `level`, `scope`, `reversibility`,
 `known`, `privileged`, `rule`, `factors[]`, `advice`, `carries[]` and `line`.
+Each entry in `factors[]` carries `points`, `why` and `rule` — the id of the
+rule or amplifier that produced it, or `null` for a factor that is not one (a
+path, a carried payload, a dry-run dampener).
 
 `overall` reports the **worst single command** in the input, with scope and
 reversibility aggregated across all of them.
+
+Every finding that scored also prints `↳ why: scoville --why <ID>`, and that
+command prints the long form for the rule: what it matches and what it
+deliberately does not, the class of incident it exists to prevent, why the band,
+scope and reversibility are what they are, the safer alternative, and the
+related rules including the generic ones it beats. Everything except the
+incident paragraph is derived from the rule table, so the explanation and the
+score cannot disagree. A rule with no incident paragraph written yet says so
+rather than printing a formulaic one. An unknown id exits `64` and suggests the
+closest matches; amplifier ids resolve in both the `FORCE` and `+FORCE`
+spellings.
 
 | Code | Meaning |
 |---|---|

@@ -108,6 +108,7 @@ scoville 'docker run acme/importer:1.2' --introspect   # resolve what actually r
 scoville -f deploy.sh --fail-on high                   # CI / agent gate
 scoville 'rm -rf /' --format json                      # machine-readable
 scoville --list-rules                                  # the whole rule set
+scoville --why K8S-DELETE-NS                            # why that rule exists
 ```
 
 Exit codes: `0` below threshold, `1` at or above `--fail-on`, `64` usage error.
@@ -120,7 +121,8 @@ usage: scoville [-h] [-f FILE] [--format {text,json}]
                 [--scale {bands,peppers}]
                 [--fail-on {safe,low,medium,high,critical}] [--strict]
                 [--introspect] [--quiet] [--verbose] [--no-color]
-                [--list-rules] [--version]
+                [--config PATH] [--no-config] [--list-rules] [--why RULE]
+                [--version]
                 [command ...]
 
 positional arguments:
@@ -143,7 +145,14 @@ options:
   --verbose, -v         show zero-weight factors too
   --no-color            never colourise (a non-tty and NO_COLOR already
                         disable it)
+  --config PATH         override file (default: nearest .scovillerc at or
+                        above the analysed file's directory)
+  --no-config           ignore any .scovillerc that would otherwise be
+                        discovered
   --list-rules          print every rule and amplifier, then exit
+  --why RULE            print the long form for one rule or amplifier id (as
+                        printed by --list-rules and on every finding), then
+                        exit
   --version             show program's version number and exit
 ```
 
@@ -156,13 +165,16 @@ kubectl delete ns prod
      +80  deleting a namespace cascades to everything inside it, PVCs included
      +15  the target names a production environment
     ↳ safer: there is no undo and no controller that will rebuild it — export the namespace first
+    ↳ why:   scoville --why K8S-DELETE-NS
 
 git push --force origin main
   HIGH        80/100  ·  scope: network  ·  irreversible
      +55  force-push overwrites remote history; other clones diverge silently
      +25  force-pushing the default branch: everyone else's clone breaks on the next pull
     ↳ safer: `--force-with-lease` refuses when the remote moved under you
+    ↳ why:   scoville --why GIT-PUSH-F
 scoville: 2 commands, worst CRITICAL 95/100 · scope cluster · irreversible
+
 ```
 
 More in [`docs/getting-started.md`](docs/getting-started.md).

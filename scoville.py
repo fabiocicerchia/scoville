@@ -689,11 +689,6 @@ RULES = [
     R("ETCDCTL-DEL", "etcdctl", r"\bdel\b.*--prefix|--prefix.*\bdel\b", 90, "cluster",
       "irreversible", "prefix delete against etcd: for a Kubernetes cluster this is the entire "
       "API state"),
-    R("VAULT-DISABLE", "vault", r"^secrets\s+disable|^(delete|destroy)\b|^kv\s+(delete|destroy)",
-      75, "account", "irreversible",
-      "disabling a secrets mount deletes every secret stored under it"),
-    R("VAULT-SEAL", "vault", r"^operator\s+(seal|generate-root|rekey)", 60, "cluster",
-      "recoverable", "sealing Vault stops every client that needs a secret until it is unsealed"),
     R("PULUMI-DESTROY", "pulumi", r"^(destroy|stack\s+rm)\b", 80, "account", "irreversible",
       "tears down every resource in the stack"),
     R("PULUMI-UP", "pulumi", r"^(up|refresh|import)\b", 45, "account", "recoverable",
@@ -702,13 +697,6 @@ RULES = [
       "deletes the cluster and the CloudFormation stacks behind it"),
     R("HEROKU-DESTROY", "heroku", r"(apps:destroy|pg:reset|addons:destroy)", 85, "account",
       "irreversible", "destroys the app or resets the database, add-on data included"),
-    R("GH-REPO-DEL", "gh", r"^repo\s+delete", 75, "account", "irreversible",
-      "deletes the repository with its issues, PRs and releases; the name is then claimable",
-      "`gh repo archive` keeps it readable and reversible"),
-    R("VELERO-DEL", "velero", r"(backup|restore|schedule)\s+delete", 65, "cluster", "irreversible",
-      "deletes a backup: the restore path for that point in time goes with it"),
-    R("ARGOCD-DEL", "argocd", r"^app\s+delete", 60, "cluster", "irreversible",
-      "deleting an Argo CD app cascades to the Kubernetes resources it owns"),
     R("ZFS-DESTROY", "zfs btrfs", r"^(destroy|delete|subvolume delete)\b", 80, "host",
       "irreversible", "destroys a dataset, subvolume or snapshot",
       "`zfs destroy -n -v` prints what would go, snapshots included"),
@@ -722,6 +710,247 @@ RULES = [
       "purges the job from state, not just its allocations"),
     R("S3CMD-RB", "s3cmd", r"^(rb|del|rm)\b", 65, "account", "irreversible",
       "removes objects or a bucket"),
+
+
+    # --- promoted CLIs: enumerated per resource, not classified by verb -----
+    #
+    # Verb classification is a floor, not a measurement: it cannot see that
+    # `openstack volume delete` costs data and `openstack server stop` costs a
+    # reboot, and it cannot see the verbs that lie. These six carry the traffic
+    # and the blast radius, so they are enumerated. Everything else in
+    # RESOURCE_CLIS is still classified — see the CLI-* rules above.
+
+    # vault ------------------------------------------------------------------
+    R("VAULT-READ", "vault", r"^(read|kv\s+get)\b", 15, "account", "reversible",
+      "prints a secret to stdout: from here it is in the scrollback, in the CI log if this "
+      "runs in one, and in whatever consumed it — Vault records the read, it cannot unsend it",
+      "`-field=<key>` prints one value instead of the whole secret, and a short-lived dynamic "
+      "credential beats reading a static one"),
+    R("VAULT-KV-DELETE", "vault", r"^kv\s+delete\b", 35, "account", "recoverable",
+      "`kv delete` is a soft delete: the versions are marked deleted and stay in storage — it "
+      "is `kv destroy` and `kv metadata delete` that are permanent",
+      "`vault kv undelete -versions=N <path>` brings it back"),
+    R("VAULT-KV-DESTROY", "vault", r"^kv\s+(destroy|metadata\s+delete)\b", 70, "account",
+      "irreversible",
+      "removes the version data itself; `kv undelete` cannot bring it back, and "
+      "`kv metadata delete` takes every version and the metadata with them",
+      "`vault kv delete` is the soft form and is recoverable"),
+    R("VAULT-SECRETS-DISABLE", "vault", r"^secrets\s+disable\b", 80, "account", "irreversible",
+      "disabling a secrets mount deletes every secret stored under it, not just the route to "
+      "them",
+      "`vault secrets move` relocates a mount without emptying it"),
+    R("VAULT-AUTH-DISABLE", "vault", r"^auth\s+disable\b", 75, "account", "irreversible",
+      "disabling an auth method revokes every token it issued: every client that authenticates "
+      "this way is locked out at once, including the one running this",
+      "`vault list auth/<path>/role` shows what still comes in through it"),
+    R("VAULT-AUDIT-DISABLE", "vault", r"^audit\s+disable\b", 60, "account", "irreversible",
+      "Vault stops recording who read which secret, and keeps serving requests while it does "
+      "— the gap in the audit trail is silent",
+      "enable the replacement device first; Vault only refuses requests when *every* audit "
+      "device fails"),
+    R("VAULT-LEASE-REVOKE", "vault", r"^lease\s+revoke\b", 65, "account", "irreversible",
+      "revokes leases and the credentials behind them: the database users and cloud keys "
+      "Vault issued are dropped as it goes",
+      "`vault list sys/leases/lookup/<prefix>` first — it prints exactly what would be revoked"),
+    R("VAULT-TOKEN-REVOKE", "vault", r"^token\s+revoke\b", 45, "account", "irreversible",
+      "a token revoke takes its child tokens too, so revoking a parent ends every session "
+      "issued from it"),
+    R("VAULT-POLICY-DELETE", "vault", r"^policy\s+delete\b", 55, "account", "recoverable",
+      "every token and role bound to this policy loses the access it granted, immediately and "
+      "with no error here — it shows up as permission denied somewhere else",
+      "`vault policy read <name>` and keep the HCL before deleting it"),
+    R("VAULT-SEAL", "vault", r"^operator\s+(seal|step-down)\b", 60, "cluster", "recoverable",
+      "sealing Vault stops every client that needs a secret until enough key holders unseal it "
+      "again — which needs the people, not just the command"),
+    R("VAULT-REKEY", "vault", r"^operator\s+(rekey|generate-root|rotate)\b", 70, "cluster",
+      "irreversible",
+      "rekeying invalidates the existing unseal shares: the old ones stop working the moment "
+      "it completes, and losing the new ones loses the cluster"),
+    R("VAULT-RAFT-RESTORE", "vault", r"^operator\s+raft\s+snapshot\s+restore\b", 90, "cluster",
+      "irreversible",
+      "replaces the whole of Vault's storage with the snapshot: every secret, policy, mount and "
+      "token written since it was taken is gone",
+      "take a fresh snapshot first — this is the one operation with no other way back"),
+    R("VAULT-RAFT-PEER", "vault", r"^operator\s+raft\s+remove-peer\b", 65, "cluster",
+      "recoverable",
+      "shrinks the raft quorum; one peer too many and the cluster loses quorum and stops "
+      "serving entirely"),
+
+    # velero -----------------------------------------------------------------
+    R("VELERO-BACKUP-CREATE", "velero", r"^backup\s+create\b", 10, "cluster", "reversible",
+      "takes a backup: the cost is load on the cluster and object storage, not data"),
+    R("VELERO-BACKUP-DELETE", "velero", r"^backup\s+delete\b", 70, "cluster", "irreversible",
+      "deletes the backup and the objects behind it in storage: that point in time stops being "
+      "restorable, and you find out at the restore",
+      "`velero backup describe <name>` — check something newer covers the same namespaces"),
+    R("VELERO-RESTORE-DELETE", "velero", r"^restore\s+delete\b", 35, "cluster", "recoverable",
+      "deletes the restore *record*, not what it restored — the objects it created stay in the "
+      "cluster, now with nothing describing where they came from"),
+    R("VELERO-RESTORE-CREATE", "velero", r"^restore\s+create\b", 50, "cluster", "irreversible",
+      "a restore writes into a live cluster: existing objects are skipped by default, but the "
+      "ones it does create are hard to tell apart from what was already there afterwards",
+      "`--namespace-mappings old:scratch` restores into a scratch namespace you can inspect"),
+    R("VELERO-SCHEDULE", "velero", r"^schedule\s+(delete|pause)\b", 55, "cluster", "recoverable",
+      "nothing breaks today: backups simply stop being taken, and the cost lands at the next "
+      "restore instead",
+      "`velero schedule get` to confirm what else still covers these namespaces"),
+    R("VELERO-LOCATION-DELETE", "velero",
+      r"^(backup-location|snapshot-location)\s+delete\b", 65, "cluster", "irreversible",
+      "removes the storage location: every backup that lives there stops being visible to "
+      "Velero, whether or not the bucket still holds it"),
+    R("VELERO-UNINSTALL", "velero", r"^uninstall\b", 75, "cluster", "irreversible",
+      "removes Velero and its CRDs — the Backup and Restore objects describing every existing "
+      "backup go with them, leaving data in the bucket with nothing that can read it",
+      "keep the backup storage location and its bucket; a reinstall can re-sync from it"),
+
+    # argocd -----------------------------------------------------------------
+    R("ARGOCD-APP-DELETE", "argocd", r"^app\s+delete\b", 60, "cluster", "irreversible",
+      "deleting an application cascades by default: the Kubernetes resources it manages are "
+      "deleted with it",
+      "`--cascade=false` removes the Argo CD record and leaves the workloads running"),
+    R("ARGOCD-APP-SYNC", "argocd", r"^app\s+sync\b", 40, "cluster", "recoverable",
+      "applies whatever is in git to the cluster right now — including a commit nobody has "
+      "reviewed yet, because sync does not care why HEAD moved",
+      "`argocd app diff` prints what would change, and `--dry-run` runs it without applying",
+      subsumes="PURGE-FLAG FORCE"),
+    R("ARGOCD-PROJ-DELETE", "argocd", r"^proj(ect)?\s+delete\b", 70, "cluster", "irreversible",
+      "deleting a project takes every application in it, and each of those cascades to its own "
+      "cluster resources"),
+    R("ARGOCD-CLUSTER-RM", "argocd", r"^cluster\s+rm\b", 45, "cluster", "recoverable",
+      "`cluster rm` de-registers the cluster from Argo CD — it does not touch the cluster. The "
+      "applications targeting it stop being reconciled and drift silently from here",
+      "`argocd app list --dest-server <url>` shows what stops being managed"),
+    R("ARGOCD-REPO-RM", "argocd", r"^repo\s+rm\b", 40, "cluster", "recoverable",
+      "removes the repository credentials: every application sourced from it fails to refresh, "
+      "with no change to what is already running"),
+    R("ARGOCD-ADMIN-IMPORT", "argocd", r"^admin\s+import\b", 70, "cluster", "irreversible",
+      "replaces Argo CD's stored state with the contents of the export: applications and "
+      "projects that are not in the file are deleted",
+      "`argocd admin export > backup.yaml` first"),
+
+    # openstack --------------------------------------------------------------
+    R("OS-SERVER-POWER", "openstack",
+      r"^server\s+(stop|reboot|shelve|suspend|pause|rescue|unset)\b", 30, "account",
+      "recoverable", "stops or reboots the instance; the disk and the ports survive it"),
+    R("OS-SERVER-DELETE", "openstack", r"^server\s+delete\b", 70, "account", "irreversible",
+      "deletes the instance and its ephemeral disk; a boot-from-volume instance keeps its root "
+      "volume only if it was not created with delete-on-termination",
+      "`openstack server shelve` frees the compute and keeps the instance"),
+    R("OS-VOLUME-DELETE", "openstack", r"^volume\s+delete\b", 80, "account", "irreversible",
+      "the data on the volume goes with it, and `--force` deletes it even while an instance "
+      "still has it attached",
+      "`openstack volume snapshot create` first — the snapshot is the only way back"),
+    R("OS-SNAPSHOT-DELETE", "openstack",
+      r"^(backup|volume\s+snapshot|image\s+snapshot)\s+delete\b", 65, "account",
+      "irreversible", "removes a restore point for a volume that is still running"),
+    R("OS-IMAGE-DELETE", "openstack", r"^image\s+delete\b", 60, "account", "irreversible",
+      "instances already running are unaffected; everything that rebuilds, autoscales or "
+      "launches from this image fails from now on"),
+    R("OS-PROJECT-DELETE", "openstack", r"^project\s+delete\b", 60, "account", "irreversible",
+      "deleting a project does not delete what is in it: the servers, volumes and floating IPs "
+      "keep running and keep billing, with no project left to manage them through",
+      "`openstack project purge --project <id>` removes the resources first — then delete it"),
+    R("OS-PROJECT-PURGE", "openstack", r"^project\s+purge\b", 88, "account", "irreversible",
+      "deletes every resource the project owns — servers, volumes, images, networks — in one "
+      "call",
+      "`--dry-run` prints the list without touching any of it"),
+    R("OS-STACK-DELETE", "openstack", r"^stack\s+delete\b", 85, "account", "irreversible",
+      "a Heat stack delete removes every resource the template created, database volumes "
+      "included"),
+    R("OS-NETWORK-DELETE", "openstack",
+      r"^(network|subnet|router|port)\s+delete\b", 70, "network", "irreversible",
+      "removing the network takes the ports on it: every instance attached loses connectivity, "
+      "and on a cloud you administer remotely this is how you lock yourself out"),
+    R("OS-CATALOG-DELETE", "openstack", r"^(endpoint|service)\s+delete\b", 75, "account",
+      "irreversible",
+      "the service catalog is how every client finds this region's APIs — removing an entry "
+      "makes that service unreachable region-wide without touching anything it manages"),
+    R("OS-USER-DELETE", "openstack", r"^(user|role|group)\s+delete\b", 55, "account",
+      "irreversible",
+      "the tokens stop working immediately; resources the user owned keep running, now with "
+      "nobody who can reach them"),
+    R("OS-SG-RULE", "openstack", r"^security\s+group\s+rule\s+create\b", 30, "network",
+      "reversible",
+      "opens a port to whatever `--remote-ip` names — the range is the whole of the decision",
+      "name a CIDR you control; `0.0.0.0/0` is the entire internet"),
+
+    # flyctl -----------------------------------------------------------------
+    R("FLY-DEPLOY", "flyctl fly", r"^deploy\b", 35, "account", "recoverable",
+      "rolls the app forward to a new release",
+      "`fly releases` lists what to roll back to, and `fly deploy --image <ref>` does it"),
+    R("FLY-SECRETS", "flyctl fly", r"^secrets\s+(set|unset|import)\b", 40, "account",
+      "recoverable",
+      "setting a secret restarts every machine in the app — this is a deploy, not a config "
+      "write, and it happens the moment the command returns",
+      "`--stage` stores the secret without restarting; the next deploy picks it up"),
+    R("FLY-SCALE-ZERO", "flyctl fly", r"^scale\s+count\s+0\b", 55, "account", "recoverable",
+      "zero machines is an outage: nothing is deleted and scaling back up restores it, but the "
+      "app is off until you do"),
+    R("FLY-MACHINE-DESTROY", "flyctl fly", r"^machines?\s+(destroy|remove)\b", 55, "account",
+      "recoverable",
+      "destroys one machine — the app, its volumes and its config survive, and `fly deploy` "
+      "recreates it"),
+    R("FLY-VOLUME-DESTROY", "flyctl fly", r"^volumes?\s+(destroy|delete)\b", 85, "account",
+      "irreversible",
+      "a Fly volume is a single local disk, not a replicated one: this destroys the only copy "
+      "of the data on it",
+      "`fly volumes snapshots list <id>` — snapshots are kept about five days and are the only "
+      "way back"),
+    R("FLY-APPS-DESTROY", "flyctl fly", r"^apps\s+destroy\b", 80, "account", "irreversible",
+      "destroys the app with its machines and its volumes, and releases the name for anyone "
+      "else to claim",
+      "`fly scale count 0` stops it running and billing without destroying anything"),
+    R("FLY-PG-DETACH", "flyctl fly", r"^(postgres|pg|mysql)\s+(detach|db\s+delete)\b", 65,
+      "account", "irreversible",
+      "detaching drops the database user and removes DATABASE_URL from the app: the app loses "
+      "its database at the next restart, not at this command"),
+    R("FLY-CERTS-REMOVE", "flyctl fly", r"^certs\s+remove\b", 45, "network", "recoverable",
+      "removes the certificate for that hostname; requests to it stop being served over HTTPS "
+      "until a new one is issued and validated"),
+
+    # gh ---------------------------------------------------------------------
+    R("GH-REPO-ARCHIVE", "gh", r"^repo\s+archive\b", 20, "account", "recoverable",
+      "makes the repository read-only and can be undone — the reversible alternative to "
+      "`repo delete`"),
+    R("GH-REPO-DEL", "gh", r"^repo\s+delete\b", 75, "account", "irreversible",
+      "deletes the repository with its issues, PRs and releases; the name is then claimable by "
+      "anyone",
+      "`gh repo archive` keeps it readable and reversible"),
+    R("GH-PR-MERGE", "gh", r"^pr\s+merge\b", 40, "account", "recoverable",
+      "merges into the base branch — on a repository that deploys on merge, this is the deploy",
+      "`--auto` waits for the required checks instead of merging now"),
+    R("GH-RELEASE-DELETE", "gh", r"^release\s+delete\b", 55, "account", "irreversible",
+      "deletes the release and every asset attached to it: anything pinned to those download "
+      "URLs breaks, including other people's CI",
+      "`gh release edit <tag> --draft` hides it and keeps the assets"),
+    R("GH-ISSUE-DELETE", "gh", r"^issue\s+delete\b", 50, "account", "irreversible",
+      "GitHub has no undo for a deleted issue: the thread, its comments and every "
+      "cross-reference to it go",
+      "closing it keeps the history and is reversible"),
+    R("GH-RUN-DELETE", "gh", r"^(run\s+delete|cache\s+delete)\b", 35, "account", "irreversible",
+      "deletes the run and its logs — the record of what CI actually did is the thing being "
+      "removed"),
+    R("GH-SECRET", "gh", r"^(secret|variable)\s+(set|delete)\b", 40, "account", "recoverable",
+      "changes what every workflow in this repository runs with; `secret delete` cannot be "
+      "undone without the original value, which by design nothing here can read back"),
+    R("GH-WORKFLOW-RUN", "gh", r"^workflow\s+run\b", 35, "account", "recoverable",
+      "triggers a workflow: what it does is whatever the workflow does, which on a deploy "
+      "pipeline is a deploy"),
+    R("GH-AUTH-TOKEN", "gh", r"^auth\s+token\b", 35, "account", "reversible",
+      "prints the OAuth token to stdout, where it lands in scrollback and in the CI log if "
+      "this runs in one",
+      "let `gh` make the authenticated call instead of extracting the token"),
+    R("GH-API-WRITE", "gh", r"^api\b(?=.*(?:-X|--method)[= ]?(?:POST|PUT|PATCH))", 45,
+      "account", "recoverable",
+      "`gh api` is the raw REST API: the verb that matters is in `-X`, and nothing else on the "
+      "command line says what this changes",
+      "run it with `--method GET` first and read what the endpoint returns"),
+    R("GH-API-DELETE", "gh", r"^api\b(?=.*(?:-X|--method)[= ]?DELETE)", 70, "account",
+      "irreversible",
+      "a DELETE through `gh api` is whatever that endpoint deletes — `/repos/{owner}/{repo}` "
+      "is the repository itself — and no verb in the command line says so",
+      "check the endpoint in the REST docs; `gh` has a named command for most of the "
+      "destructive ones, and those prompt"),
 
     R("CM-ANSIBLE", "ansible ansible-playbook", None, 40, "cluster", "recoverable",
       "runs against every host in the inventory pattern at once",
@@ -868,8 +1097,10 @@ AMPS = [
       r"no-input|approve|batch|accept-all|skip-confirmation)\b|(^|\s)-[a-zA-Z]*y(\s|$)", 8,
       "auto-confirms every prompt, including the ones you would have stopped at — the last "
       "human checkpoint before this runs"),
+    # `--cascade=false` is the opposite of a purge, so the negated forms are
+    # excluded rather than counted as the thorough variant they name.
     A("PURGE-FLAG", None, r"--(purge|prune|wipe|hard|cascade|destroy-data|delete-data|"
-                          r"remove-data|permanent)\b", 12,
+                          r"remove-data|permanent)\b(?![= ]?(false|no|off|none)\b)", 12,
       "asks for the thorough variant: state that would otherwise survive goes too"),
     A("SECRET-IN-ARGV", None,
       r"--(password|passwd|token|api-key|apikey|secret|access-key|private-key)[= ]\S|"
@@ -906,6 +1137,31 @@ AMPS = [
       "this is the daemon your session depends on", "host"),
     A("HISTFILE", None, r"unset\s+HISTFILE|HISTFILE=/dev/null|set \+o history", 30,
       "disables shell history: the audit trail stops here", "host", "irreversible"),
+
+    # --- flags that only mean something on one CLI ---------------------------
+    A("VAULT-LEASE-PREFIX", "vault", r"^lease\s+revoke\b(?=.*(^|\s)-prefix\b)", 15,
+      "`-prefix` revokes every lease under the path rather than the one named", "account"),
+    A("VAULT-LEASE-FORCE", "vault", r"^lease\s+revoke\b(?=.*(^|\s)-force\b)", 20,
+      "vault's `-force` drops the lease without revoking the credential behind it: the database "
+      "user or cloud key stays live with nothing left tracking its expiry",
+      "account", "irreversible"),
+    A("VELERO-OVERWRITE", "velero", r"--existing-resource-policy[= ]update", 20,
+      "restores over objects that already exist: live resources are overwritten with the state "
+      "in the backup", "cluster", "irreversible"),
+    A("ARGOCD-PRUNE", "argocd", r"--prune\b", 25,
+      "`--prune` deletes cluster resources that are no longer in git — anything created outside "
+      "Argo CD goes with them", "cluster", "irreversible"),
+    A("ARGOCD-REPLACE", "argocd", r"--(replace|force)\b", 15,
+      "argocd's `--replace`/`--force` delete and recreate each resource instead of patching it: "
+      "pods restart, and anything holding local state comes back empty", "cluster"),
+    A("FLY-IMMEDIATE", "flyctl fly", r"--strategy[= ]immediate", 25,
+      "the immediate strategy stops every machine before starting the new ones — a full outage, "
+      "not a rolling deploy", "account"),
+    A("GH-ADMIN", "gh", r"--admin\b", 22,
+      "`--admin` merges past branch protection: required reviews and status checks are bypassed",
+      "account"),
+    A("GH-CLEANUP-TAG", "gh", r"--cleanup-tag\b", 12,
+      "deletes the git tag as well as the release, so the commit it pointed at is no longer named"),
 ]
 
 # Softeners: the same command, asked for in a way that leaves you an out. A
@@ -923,12 +1179,22 @@ SOFTENERS = [
       "`--limit` narrows the run to part of the inventory rather than the whole fleet"),
     A("FORCE-WITH-LEASE", "git", r"--force-with-lease", -5,
       "refuses to overwrite the remote if it moved since you last fetched"),
+    A("ARGOCD-NO-CASCADE", "argocd", r"--cascade[= ]?false", -20,
+      "`--cascade=false` removes the Argo CD record only: the Kubernetes resources it manages "
+      "stay running"),
+    A("FLY-STAGE", "flyctl fly", r"--stage\b", -15,
+      "`--stage` stores the secret without restarting the app; the next deploy applies it"),
+    A("GH-AUTO-MERGE", "gh", r"--auto\b", -12,
+      "`--auto` queues the merge behind the required checks instead of merging now"),
 ]
 
 DAMPENERS = [
     (re.compile(r"--dry-run(?![= ]?(none|server))|--dryrun|--what-if|--no-act|(^|\s)--check(\s|$)"),
      "--dry-run: reports what it would do and changes nothing"),
     (re.compile(r"(^|\s)-n(\s|$)"), None),  # only honoured for the bins below
+    # vault prints the equivalent curl invocation and makes no request at all.
+    (re.compile(r"-output-curl-string\b"),
+     "-output-curl-string: prints the request as curl and sends nothing"),
 ]
 DRY_RUN_N_BINS = {"rsync", "mv", "cp", "ln", "make", "ansible-playbook", "fsck", "e2fsck",
                   "patch", "git"}
@@ -1433,6 +1699,22 @@ def path_factors(binary, args):
             out.append((45, f"target is a device node (`{p}`), not a regular file",
                         "host", "irreversible"))
     return out
+
+
+def specific_clis():
+    """The resource CLIs enumerated per resource rather than by verb.
+
+    Derived from the rule set rather than listed, because docs/rules.md names
+    which CLIs are enumerated and which are carried by verb classification, and
+    a hand-maintained list drifts the first time a rule is added.
+    """
+    enumerated = {b for r in RULES if not r["generic"] for b in r["bins"]}
+    return sorted(set(RESOURCE_CLIS.split()) & enumerated)
+
+
+def generic_clis():
+    """The resource CLIs verb classification still carries on its own."""
+    return sorted(set(RESOURCE_CLIS.split()) - set(specific_clis()))
 
 
 def pick_rule(binary, args_str):

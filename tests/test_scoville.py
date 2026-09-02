@@ -8,9 +8,11 @@ from scoville import (
     apply_overrides,
     band,
     find_config,
+    generic_clis,
     load_config,
     main,
     overall,
+    specific_clis,
     split_commands,
 )
 
@@ -337,7 +339,15 @@ def test_a_resource_named_delete_does_not_make_a_read_destructive():
 
 def test_write_verbs_sit_between():
     assert level("gh pr create --title x") == "low"
-    assert level("flyctl deploy") == "low"
+    assert level("doctl compute droplet create web-1 --size s-1vcpu-1gb") == "low"
+
+
+def test_promoting_a_cli_can_move_a_verb_off_the_generic_score():
+    # `flyctl deploy` was `low` under verb classification, which scores every
+    # write the same. A Fly deploy is a release to production, so promoting the
+    # CLI moves it deliberately — this is the recalibration the promotion buys,
+    # not a drift.
+    assert level("flyctl deploy") == "medium"
 
 
 def test_specific_rules_beat_generic_verbs_even_when_lower():
@@ -852,3 +862,109 @@ def test_a_named_config_that_is_missing_is_an_error(tmp_path):
     # Running without the policy the caller asked for would silently apply a
     # different one than they think is in force.
     assert main(["ls", "--config", str(tmp_path / "nope.json")]) == 64
+
+
+# --- promoted CLIs, and the floor underneath everything else ----------------
+
+def rule_id(cmd):
+    return one(cmd)["rule"]
+
+
+PROMOTED = ("vault", "velero", "argocd", "openstack", "flyctl", "gh")
+
+
+def test_the_promoted_clis_have_rules_of_their_own():
+    assert set(PROMOTED) <= set(specific_clis())
+
+
+@pytest.mark.parametrize("cli", ["hcloud", "doctl", "scw", "linode-cli", "wrangler", "pscale"])
+def test_verb_classification_still_carries_the_clis_nobody_promoted(cli):
+    # The floor is the reason a gate is worth having on day one of a new CLI.
+    # Promoting six of them must not quietly remove it from the other forty.
+    assert cli in generic_clis()
+    assert rule_id(f"{cli} server delete web-1") == "CLI-DESTROY"
+    assert level(f"{cli} server delete web-1") == "high"
+    assert rule_id(f"{cli} server list") == "CLI-READ"
+    assert level(f"{cli} server list") == "safe"
+
+
+def test_an_unenumerated_subcommand_of_a_promoted_cli_falls_back_to_the_verb():
+    # Promotion is per resource, not per binary: a subcommand nobody wrote a
+    # rule for is still classified rather than dropped to safe.
+    assert rule_id("gh label delete wontfix") == "CLI-DESTROY"
+    assert rule_id("openstack flavor delete m1.small") == "CLI-DESTROY"
+    assert rule_id("vault namespace delete acme") == "CLI-DESTROY"
+    assert level("velero plugin remove acme/plugin") == "high"
+
+
+def test_a_cli_nobody_has_enumerated_still_cannot_score_safe():
+    assert level("frobctl delete cluster prod") == "high"
+
+
+# --- the verbs that lie -----------------------------------------------------
+
+def test_vault_kv_delete_is_soft_and_kv_destroy_is_not():
+    # `kv delete` marks versions deleted; `kv undelete` brings them back. The
+    # generic classifier cannot see that, and scored both as a destroy.
+    assert score("vault kv delete secret/db") < score("vault kv destroy secret/db")
+    assert one("vault kv delete secret/db")["reversibility"] == "recoverable"
+    assert one("vault kv destroy secret/db")["reversibility"] == "irreversible"
+
+
+def test_openstack_project_delete_leaves_the_resources_running():
+    # The trap: the project goes, the servers and volumes in it do not — they
+    # keep running and keep billing with nothing left to manage them through.
+    assert score("openstack project delete acme") < score("openstack project purge --project acme")
+    assert "keep billing" in one("openstack project delete acme")["factors"][0]["why"]
+
+
+def test_argocd_cluster_rm_does_not_touch_the_cluster():
+    assert score("argocd cluster rm https://k8s.internal") < score("argocd app delete api")
+    assert one("argocd cluster rm https://k8s.internal")["reversibility"] == "recoverable"
+
+
+def test_velero_restore_delete_removes_the_record_not_the_restore():
+    assert score("velero restore delete r1") < score("velero backup delete daily-1")
+
+
+def test_gh_api_is_scored_on_the_method_not_the_subcommand():
+    # `gh api` is not a destructive verb, so verb classification read
+    # `gh api -X DELETE /repos/acme/api` as a write. It deletes the repository.
+    assert level("gh api /repos/acme/api") == "safe"
+    assert level("gh api -X PATCH /repos/acme/api") == "medium"
+    assert level("gh api -X DELETE /repos/acme/api") == "high"
+
+
+def test_fly_secrets_set_is_a_restart():
+    # `secrets set` restarts every machine in the app; `--stage` is the form
+    # that does not, and it has to score below the one that does.
+    assert score("flyctl secrets set A=b --stage") < score("flyctl secrets set A=b")
+
+
+# --- per-resource bases, which is the point of promoting a CLI --------------
+
+def test_the_resource_moves_the_score_within_one_cli():
+    assert score("openstack server stop web-1") < score("openstack server delete web-1")
+    assert score("openstack server delete web-1") < score("openstack volume delete vol-1")
+    assert score("flyctl machine destroy 4d8") < score("flyctl apps destroy api")
+    assert score("flyctl apps destroy api") < score("flyctl volumes destroy vol_1")
+    assert score("gh repo archive acme/api") < score("gh repo delete acme/api")
+
+
+def test_the_cli_s_own_flags_amplify_and_soften():
+    assert score("argocd app sync api --prune") > score("argocd app sync api")
+    assert score("argocd app delete api --cascade=false") < score("argocd app delete api")
+    assert score("gh pr merge 42 --admin") > score("gh pr merge 42")
+    assert score("gh pr merge 42 --auto") < score("gh pr merge 42")
+    assert score("vault lease revoke -prefix db/creds/") > score("vault lease revoke db/creds/x")
+
+
+def test_vault_output_curl_string_sends_nothing():
+    # It prints the equivalent curl invocation and makes no request at all,
+    # which is vault's dry run under another name.
+    assert level("vault delete -output-curl-string secret/db") == "safe"
+
+
+def test_a_negated_cascade_is_not_a_purge():
+    # `--cascade=false` names the purge flag and asks for the opposite.
+    assert score("argocd app delete api --cascade=false") < score("argocd app delete api")

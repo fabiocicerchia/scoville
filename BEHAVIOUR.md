@@ -228,10 +228,25 @@ position** — `delete`, `destroy`, `terminate`, `purge`, `wipe`, `drop` — add
 40 and is explicitly labelled a floor rather than a measurement. `frobctl delete
 cluster prod` scores `high` even though no rule for `frobctl` exists.
 
-This is why roughly 50 resource CLIs are classified by verb rather than
+This is why around 40 resource CLIs are classified by verb rather than
 enumerated: `hcloud server delete` is `high` and `hcloud server list` is `safe`
 without a per-CLI rule, and position decides, so `hcloud server describe
 delete-me` stays `safe`.
+
+Classification is a floor, not a measurement, and it is replaced where the
+measurement is worth having. The CLIs enumerated per resource — `vault`,
+`velero`, `argocd`, `openstack`, `flyctl`, `gh`, and the storage and
+virtualisation tools alongside them — score on *what* is being acted on
+(`openstack volume delete` costs data, `openstack server stop` costs a reboot)
+and on the CLI's own flags. `specific_clis()` and `generic_clis()` report the
+split. Enumeration is per resource, not per binary: a subcommand with no rule of
+its own still falls back to verb classification, so `gh label delete` is `high`
+on the floor rather than unscored.
+
+A specific rule always beats a generic one, **including when it scores lower**.
+That is what lets a lying verb be corrected downwards: `vault kv delete` is a
+soft delete Vault can undo, and scoring it as a destroy would train people to
+ignore the one that cannot be undone (`vault kv destroy`).
 
 `--strict` raises unknown commands from 5 to 40 (`medium`), for gates where
 "nobody has reviewed this" should itself block.

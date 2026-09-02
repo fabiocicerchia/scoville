@@ -198,12 +198,14 @@ More in [`docs/scoring.md`](docs/scoring.md).
 
 ## Rules
 
-200 rules, 55 amplifiers and 5 softeners across filesystem and devices,
+259 rules, 64 amplifiers and 8 softeners across filesystem and devices,
 permissions, system and service state, networking, package managers, git,
 containers, Kubernetes, Terraform/Pulumi, AWS/GCP/Azure, databases, backup
-tooling, storage, virtualisation, audit trail and config management. The long
-tail — ~50 resource CLIs — is covered by verb classification rather than
-enumeration, and an unknown CLI still cannot score `safe` on `delete`.
+tooling, storage, virtualisation, audit trail and config management. Resource
+CLIs where the blast radius and the traffic are both high — `vault`, `velero`,
+`argocd`, `openstack`, `flyctl`, `gh` among them — are enumerated per resource;
+the remaining ~40 are covered by verb classification rather than enumeration,
+and an unknown CLI still cannot score `safe` on `delete`.
 
 The rule set *is* the product; it is meant to grow. Every rule carries a
 plain-language *why*, and destructive ones carry a safer alternative.

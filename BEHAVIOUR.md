@@ -238,6 +238,20 @@ delete-me` stays `safe`.
 
 ---
 
+## Per-repo overrides
+
+A `.scovillerc` discovered from the analysed file's directory upwards (or named
+with `--config`) can `allow`, `deny` or `rescore` commands matched by glob. Each
+entry requires a `why`, and each override is appended to the factor trace rather
+than applied silently — a suppressed finding keeps its real score and says who
+suppressed it.
+
+Precedence is `deny` > `rescore` > `allow`. An `allow` holds `--fail-on` open
+but does not change the reported level, and survives `--strict`. See
+[docs/config.md](docs/config.md).
+
+---
+
 ## Output and exit codes
 
 Text output prints every factor with its points and reason, then the safer

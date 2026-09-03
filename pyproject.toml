@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scoville"
-version = "0.2.1"
+version = "0.3.0"
 description = "Risk posture for shell commands: score, blast radius and reversibility before you run them"
 readme = "README.md"
 license = { text = "Apache-2.0" }

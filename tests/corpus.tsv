@@ -242,8 +242,6 @@ low	kubectl port-forward svc/db 5432:5432
 safe	kubectl delete ns prod --dry-run=client
 medium	helm upgrade --install api ./chart
 high	helm uninstall api
-high	argocd app delete api
-high	velero backup delete daily-1
 
 ## infrastructure as code
 safe	terraform validate
@@ -285,13 +283,96 @@ high	az vm delete --name web-1
 high	hcloud server delete my-db
 high	scw instance server terminate 11111111
 high	doctl compute droplet delete web-1
-high	flyctl apps destroy api
 critical	heroku pg:reset DATABASE_URL
-high	gh repo delete acme/api
-safe	gh pr list
-low	gh pr create --title 'fix'
 high	wrangler r2 bucket delete assets
 high	frobctl delete cluster prod
+
+## vault
+safe	vault kv list secret/
+low	vault read secret/data/db
+medium	vault kv delete secret/db
+high	vault kv destroy -versions=1 secret/db
+high	vault secrets disable kv/
+high	vault auth disable approle/
+high	vault audit disable file/
+high	vault lease revoke -prefix database/creds/readonly
+medium	vault token revoke hvs.CAESIA
+medium	vault policy delete deploy
+high	vault operator seal
+high	vault operator rekey -init
+critical	vault operator raft snapshot restore backup.snap
+high	vault operator raft remove-peer node-2
+safe	vault write -output-curl-string secret/db value=x
+
+## velero
+safe	velero backup get
+safe	velero backup create daily-1 --include-namespaces app
+medium	velero restore delete r1
+medium	velero restore create --from-backup daily-1
+high	velero restore create --from-backup daily-1 --existing-resource-policy=update
+medium	velero schedule delete nightly
+high	velero backup delete daily-1
+high	velero backup-location delete default
+high	velero uninstall
+
+## argocd
+safe	argocd app list
+medium	argocd app sync api
+high	argocd app sync api --prune
+medium	argocd app delete api --cascade=false
+high	argocd app delete api
+medium	argocd cluster rm https://k8s.internal
+medium	argocd repo rm https://github.com/acme/manifests
+high	argocd proj delete platform
+high	argocd admin import backup.yaml
+
+## openstack
+safe	openstack server list
+low	openstack server stop web-1
+high	openstack server delete web-1
+high	openstack volume delete vol-1
+high	openstack volume snapshot delete snap-1
+high	openstack image delete ubuntu-22.04
+high	openstack project delete acme
+critical	openstack project purge --project acme
+critical	openstack stack delete platform
+high	openstack network delete internal
+high	openstack endpoint delete 1a2b3c
+medium	openstack user delete deploy
+low	openstack security group rule create --remote-ip 10.0.0.0/8 --dst-port 22 web
+high	openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 22 web
+
+## flyctl
+safe	flyctl apps list
+medium	flyctl deploy
+high	flyctl deploy --strategy immediate
+medium	flyctl secrets set DATABASE_URL=postgres://db
+low	flyctl secrets set DATABASE_URL=postgres://db --stage
+medium	flyctl scale count 0
+medium	flyctl machine destroy 4d891de2
+medium	flyctl certs remove api.example.com
+high	flyctl pg detach my-db
+high	flyctl apps destroy api
+critical	flyctl volumes destroy vol_2n0l3vlnklpr8qy7
+
+## gh
+safe	gh pr list
+low	gh pr create --title 'fix'
+low	gh repo archive acme/api
+medium	gh pr merge 42 --squash
+low	gh pr merge 42 --auto --squash
+high	gh pr merge 42 --admin --squash
+medium	gh issue delete 17
+medium	gh release delete v1.2.0
+high	gh release delete v1.2.0 --cleanup-tag
+medium	gh run delete 1234567
+medium	gh secret set DEPLOY_KEY
+medium	gh workflow run deploy.yml
+medium	gh auth token
+medium	gh api -X PATCH /repos/acme/api
+high	gh api -X DELETE /repos/acme/api
+high	gh repo delete acme/api
+high	gh label delete wontfix
 
 ## databases
 low	psql -c 'SELECT count(*) FROM orders'
@@ -311,8 +392,6 @@ high	rclone purge remote:bucket
 high	restic forget --prune --keep-last 1
 high	s3cmd rb s3://assets
 critical	etcdctl del --prefix ''
-high	vault secrets disable kv/
-high	vault operator seal
 
 ## virtualisation
 medium	virsh destroy vm1

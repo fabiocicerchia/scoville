@@ -10,7 +10,7 @@ Levels: `safe` 0–14 · `low` 15–34 · `medium` 35–59 · `high` 60–84 ·
 it is to get back.
 
 
-315 commands catalogued: **49** safe · **33** low · **87** medium · **92** high · **54** critical.
+382 commands catalogued: **56** safe · **39** low · **111** medium · **118** high · **58** critical.
 
 
 ## reading state
@@ -283,8 +283,6 @@ it is to get back.
 | `safe` 12 | `kubectl delete ns prod --dry-run=client` | cluster | reversible |
 | `medium` 35 | `helm upgrade --install api ./chart` | cluster | recoverable |
 | `high` 60 | `helm uninstall api` | cluster | irreversible |
-| `high` 60 | `argocd app delete api` | cluster | irreversible |
-| `high` 65 | `velero backup delete daily-1` | cluster | irreversible |
 
 ## infrastructure as code
 
@@ -335,13 +333,114 @@ it is to get back.
 | `high` 65 | `hcloud server delete my-db` | account | irreversible |
 | `high` 65 | `scw instance server terminate 11111111` | account | irreversible |
 | `high` 65 | `doctl compute droplet delete web-1` | account | irreversible |
-| `high` 65 | `flyctl apps destroy api` | account | irreversible |
 | `critical` 85 | `heroku pg:reset DATABASE_URL` | account | irreversible |
-| `high` 75 | `gh repo delete acme/api` | account | irreversible |
-| `safe` 0 | `gh pr list` | none | reversible |
-| `low` 25 | `gh pr create --title 'fix'` | account | recoverable |
 | `high` 65 | `wrangler r2 bucket delete assets` | account | irreversible |
 | `high` 60 | `frobctl delete cluster prod` | account | irreversible |
+
+## vault
+
+| Level | Command | Scope | Reversibility |
+|---|---|---|---|
+| `safe` 0 | `vault kv list secret/` | none | reversible |
+| `low` 15 | `vault read secret/data/db` | account | reversible |
+| `medium` 35 | `vault kv delete secret/db` | account | recoverable |
+| `high` 70 | `vault kv destroy -versions=1 secret/db` | account | irreversible |
+| `high` 80 | `vault secrets disable kv/` | account | irreversible |
+| `high` 75 | `vault auth disable approle/` | account | irreversible |
+| `high` 60 | `vault audit disable file/` | account | irreversible |
+| `high` 80 | `vault lease revoke -prefix database/creds/readonly` | account | irreversible |
+| `medium` 45 | `vault token revoke hvs.CAESIA` | account | irreversible |
+| `medium` 55 | `vault policy delete deploy` | account | recoverable |
+| `high` 60 | `vault operator seal` | cluster | recoverable |
+| `high` 70 | `vault operator rekey -init` | cluster | irreversible |
+| `critical` 90 | `vault operator raft snapshot restore backup.snap` | cluster | irreversible |
+| `high` 65 | `vault operator raft remove-peer node-2` | cluster | recoverable |
+| `safe` 5 | `vault write -output-curl-string secret/db value=x` | none | reversible |
+
+## velero
+
+| Level | Command | Scope | Reversibility |
+|---|---|---|---|
+| `safe` 0 | `velero backup get` | none | reversible |
+| `safe` 10 | `velero backup create daily-1 --include-namespaces app` | cluster | reversible |
+| `medium` 35 | `velero restore delete r1` | cluster | recoverable |
+| `medium` 50 | `velero restore create --from-backup daily-1` | cluster | irreversible |
+| `high` 70 | `velero restore create --from-backup daily-1 --existing-resource-policy=update` | cluster | irreversible |
+| `medium` 55 | `velero schedule delete nightly` | cluster | recoverable |
+| `high` 70 | `velero backup delete daily-1` | cluster | irreversible |
+| `high` 65 | `velero backup-location delete default` | cluster | irreversible |
+| `high` 75 | `velero uninstall` | cluster | irreversible |
+
+## argocd
+
+| Level | Command | Scope | Reversibility |
+|---|---|---|---|
+| `safe` 0 | `argocd app list` | none | reversible |
+| `medium` 40 | `argocd app sync api` | cluster | recoverable |
+| `high` 65 | `argocd app sync api --prune` | cluster | irreversible |
+| `medium` 40 | `argocd app delete api --cascade=false` | cluster | irreversible |
+| `high` 60 | `argocd app delete api` | cluster | irreversible |
+| `medium` 45 | `argocd cluster rm https://k8s.internal` | cluster | recoverable |
+| `medium` 40 | `argocd repo rm https://github.com/acme/manifests` | cluster | recoverable |
+| `high` 70 | `argocd proj delete platform` | cluster | irreversible |
+| `high` 70 | `argocd admin import backup.yaml` | cluster | irreversible |
+
+## openstack
+
+| Level | Command | Scope | Reversibility |
+|---|---|---|---|
+| `safe` 0 | `openstack server list` | none | reversible |
+| `low` 30 | `openstack server stop web-1` | account | recoverable |
+| `high` 70 | `openstack server delete web-1` | account | irreversible |
+| `high` 80 | `openstack volume delete vol-1` | account | irreversible |
+| `high` 65 | `openstack volume snapshot delete snap-1` | account | irreversible |
+| `high` 60 | `openstack image delete ubuntu-22.04` | account | irreversible |
+| `high` 60 | `openstack project delete acme` | account | irreversible |
+| `critical` 88 | `openstack project purge --project acme` | account | irreversible |
+| `critical` 85 | `openstack stack delete platform` | account | irreversible |
+| `high` 70 | `openstack network delete internal` | network | irreversible |
+| `high` 75 | `openstack endpoint delete 1a2b3c` | account | irreversible |
+| `medium` 55 | `openstack user delete deploy` | account | irreversible |
+| `low` 30 | `openstack security group rule create --remote-ip 10.0.0.0/8 --dst-port 22 web` | network | reversible |
+| `high` 65 | `openstack security group rule create --remote-ip 0.0.0.0/0 --dst-port 22 web` | network | reversible |
+
+## flyctl
+
+| Level | Command | Scope | Reversibility |
+|---|---|---|---|
+| `safe` 0 | `flyctl apps list` | none | reversible |
+| `medium` 35 | `flyctl deploy` | account | recoverable |
+| `high` 60 | `flyctl deploy --strategy immediate` | account | recoverable |
+| `medium` 40 | `flyctl secrets set DATABASE_URL=postgres://db` | account | recoverable |
+| `low` 25 | `flyctl secrets set DATABASE_URL=postgres://db --stage` | account | recoverable |
+| `medium` 55 | `flyctl scale count 0` | account | recoverable |
+| `medium` 55 | `flyctl machine destroy 4d891de2` | account | recoverable |
+| `medium` 45 | `flyctl certs remove api.example.com` | network | recoverable |
+| `high` 65 | `flyctl pg detach my-db` | account | irreversible |
+| `high` 80 | `flyctl apps destroy api` | account | irreversible |
+| `critical` 85 | `flyctl volumes destroy vol_2n0l3vlnklpr8qy7` | account | irreversible |
+
+## gh
+
+| Level | Command | Scope | Reversibility |
+|---|---|---|---|
+| `safe` 0 | `gh pr list` | none | reversible |
+| `low` 25 | `gh pr create --title 'fix'` | account | recoverable |
+| `low` 20 | `gh repo archive acme/api` | account | recoverable |
+| `medium` 40 | `gh pr merge 42 --squash` | account | recoverable |
+| `low` 28 | `gh pr merge 42 --auto --squash` | account | recoverable |
+| `high` 62 | `gh pr merge 42 --admin --squash` | account | recoverable |
+| `medium` 50 | `gh issue delete 17` | account | irreversible |
+| `medium` 55 | `gh release delete v1.2.0` | account | irreversible |
+| `high` 67 | `gh release delete v1.2.0 --cleanup-tag` | account | irreversible |
+| `medium` 35 | `gh run delete 1234567` | account | irreversible |
+| `medium` 40 | `gh secret set DEPLOY_KEY` | account | recoverable |
+| `medium` 35 | `gh workflow run deploy.yml` | account | recoverable |
+| `medium` 35 | `gh auth token` | account | reversible |
+| `medium` 45 | `gh api -X PATCH /repos/acme/api` | account | recoverable |
+| `high` 70 | `gh api -X DELETE /repos/acme/api` | account | irreversible |
+| `high` 75 | `gh repo delete acme/api` | account | irreversible |
+| `high` 65 | `gh label delete wontfix` | account | irreversible |
 
 ## databases
 
@@ -367,8 +466,6 @@ it is to get back.
 | `high` 77 | `restic forget --prune --keep-last 1` | account | irreversible |
 | `high` 65 | `s3cmd rb s3://assets` | account | irreversible |
 | `critical` 90 | `etcdctl del --prefix ''` | cluster | irreversible |
-| `high` 75 | `vault secrets disable kv/` | account | irreversible |
-| `high` 60 | `vault operator seal` | cluster | recoverable |
 
 ## virtualisation
 

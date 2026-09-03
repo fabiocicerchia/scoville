@@ -167,6 +167,9 @@ a deliberate design choice: the honest answer to "what does this do?" is
 - `./foo.sh` and `source foo.sh` from disk
 - `Makefile` recipes for the named target
 - `package.json` scripts for `npm`/`yarn`/`pnpm run`
+- shell **functions and aliases defined in the analysed input** (and in what it
+  sources): a call to a local function is scored as its body, and an alias is
+  expanded to the command it really is
 
 Resolved content is analysed recursively and reported with the file, the line
 and the command that drove the score. Limits: 3 levels deep, 256 KB per file,
@@ -175,8 +178,47 @@ and a cycle guard so a script that runs itself terminates.
 Introspection resolves uncertainty in **both** directions. A wrapper that turns
 out to run `ls` scores *lower* once read, not higher.
 
+Local definitions have three rules of their own:
+
+- **Nothing outside the analysed input is read.** `~/.bashrc` is not consulted,
+  so a script scores the same on any machine.
+- **A name is resolved at the call site.** A function called *above* its own
+  definition is not resolved — bash reads top to bottom — but a function that
+  calls one defined below it is, because both are in scope by the time either
+  runs. A later definition of the same name wins, which is what redefinition
+  means, and an alias shadowing a real binary is the case most worth catching.
+- **Recursion stops rather than unrolling.** A name already on the call chain
+  contributes zero and says so; the non-recursive arm of the body is still
+  scored. The guard is a call stack, not a visited set, so calling the same
+  helper twice scores both calls.
+
 Paths resolve against the directory of the file passed to `-f`, or the current
 working directory otherwise.
+
+### Kubernetes RBAC
+
+Under `--introspect`, a `kubectl` line is also checked against the context that
+would run it, with `kubectl auth can-i` — a `SelfSubjectAccessReview`, which
+asks the API server *would you allow this* and creates, changes and runs
+nothing.
+
+| what `can-i` said | effect |
+| --- | --- |
+| `no` | **−30**, and the factor names the context it asked |
+| `yes`, and `can-i '*' '*'` also `yes` | **+10**, scope widened to `cluster` |
+| `yes` | no change, recorded in the trace |
+| nothing usable — no context, timeout, unreachable, unparseable | **no change**, recorded as "no answer" |
+
+The last row is the rule: **nothing is dampened unless a refusal is positively
+established**, because a dampener that fires on a failed check under-reports
+risk. `--kube-timeout` bounds one call, and a timeout is "no answer".
+
+The refusal is points, not a cap: the context is read now and the command may
+run later against a different one, which is also why the factor names it.
+Verbs are mapped to the RBAC verbs they need (`apply` → `patch`) and short
+resource names expanded (`ns` → `namespaces`) before the question is asked; an
+unrecognised resource is passed through verbatim, because the RBAC resource
+list is open.
 
 ---
 
@@ -211,13 +253,42 @@ position** — `delete`, `destroy`, `terminate`, `purge`, `wipe`, `drop` — add
 40 and is explicitly labelled a floor rather than a measurement. `frobctl delete
 cluster prod` scores `high` even though no rule for `frobctl` exists.
 
-This is why roughly 50 resource CLIs are classified by verb rather than
+This is why around 40 resource CLIs are classified by verb rather than
 enumerated: `hcloud server delete` is `high` and `hcloud server list` is `safe`
 without a per-CLI rule, and position decides, so `hcloud server describe
 delete-me` stays `safe`.
 
+Classification is a floor, not a measurement, and it is replaced where the
+measurement is worth having. The CLIs enumerated per resource — `vault`,
+`velero`, `argocd`, `openstack`, `flyctl`, `gh`, and the storage and
+virtualisation tools alongside them — score on *what* is being acted on
+(`openstack volume delete` costs data, `openstack server stop` costs a reboot)
+and on the CLI's own flags. `specific_clis()` and `generic_clis()` report the
+split. Enumeration is per resource, not per binary: a subcommand with no rule of
+its own still falls back to verb classification, so `gh label delete` is `high`
+on the floor rather than unscored.
+
+A specific rule always beats a generic one, **including when it scores lower**.
+That is what lets a lying verb be corrected downwards: `vault kv delete` is a
+soft delete Vault can undo, and scoring it as a destroy would train people to
+ignore the one that cannot be undone (`vault kv destroy`).
+
 `--strict` raises unknown commands from 5 to 40 (`medium`), for gates where
 "nobody has reviewed this" should itself block.
+
+---
+
+## Per-repo overrides
+
+A `.scovillerc` discovered from the analysed file's directory upwards (or named
+with `--config`) can `allow`, `deny` or `rescore` commands matched by glob. Each
+entry requires a `why`, and each override is appended to the factor trace rather
+than applied silently — a suppressed finding keeps its real score and says who
+suppressed it.
+
+Precedence is `deny` > `rescore` > `allow`. An `allow` holds `--fail-on` open
+but does not change the reported level, and survives `--strict`. See
+[docs/config.md](docs/config.md).
 
 ---
 
@@ -231,9 +302,23 @@ alternative where one exists. `--scale peppers` renames the bands
 `--verbose` also shows zero-weight factors; `--format json` emits `overall` plus
 one object per command with `score`, `level`, `scope`, `reversibility`,
 `known`, `privileged`, `rule`, `factors[]`, `advice`, `carries[]` and `line`.
+Each entry in `factors[]` carries `points`, `why` and `rule` — the id of the
+rule or amplifier that produced it, or `null` for a factor that is not one (a
+path, a carried payload, a dry-run dampener).
 
 `overall` reports the **worst single command** in the input, with scope and
 reversibility aggregated across all of them.
+
+Every finding that scored also prints `↳ why: scoville --why <ID>`, and that
+command prints the long form for the rule: what it matches and what it
+deliberately does not, the class of incident it exists to prevent, why the band,
+scope and reversibility are what they are, the safer alternative, and the
+related rules including the generic ones it beats. Everything except the
+incident paragraph is derived from the rule table, so the explanation and the
+score cannot disagree. A rule with no incident paragraph written yet says so
+rather than printing a formulaic one. An unknown id exits `64` and suggests the
+closest matches; amplifier ids resolve in both the `FORCE` and `+FORCE`
+spellings.
 
 | Code | Meaning |
 |---|---|
@@ -329,3 +414,8 @@ that a backup two lines earlier changes what a `DROP TABLE` costs.
 `--introspect` reads a wrapper at analysis time. What actually runs later may
 differ — the file can change, and `$PATH` decides which `foo.sh` is found. It
 resolves what it can see from where it is run.
+
+The same applies to the cluster: the kube context is read at scoring time and
+the command may run later under a different one, or with a token that has been
+re-bound since. An RBAC factor is evidence about *this* context, named in the
+factor for exactly that reason — it is never a guarantee about the run.

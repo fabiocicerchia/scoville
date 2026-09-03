@@ -16,6 +16,8 @@ ENTRYPOINT, `--introspect` resolves it with read-only docker inspects.
   scoville 'kubectl delete ns prod' --fail-on high
 """
 import argparse
+import difflib
+import fnmatch
 import json
 import os
 import re
@@ -23,6 +25,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import textwrap
 
 __version__ = "0.2.1"  # x-release-please-version
 
@@ -688,11 +691,6 @@ RULES = [
     R("ETCDCTL-DEL", "etcdctl", r"\bdel\b.*--prefix|--prefix.*\bdel\b", 90, "cluster",
       "irreversible", "prefix delete against etcd: for a Kubernetes cluster this is the entire "
       "API state"),
-    R("VAULT-DISABLE", "vault", r"^secrets\s+disable|^(delete|destroy)\b|^kv\s+(delete|destroy)",
-      75, "account", "irreversible",
-      "disabling a secrets mount deletes every secret stored under it"),
-    R("VAULT-SEAL", "vault", r"^operator\s+(seal|generate-root|rekey)", 60, "cluster",
-      "recoverable", "sealing Vault stops every client that needs a secret until it is unsealed"),
     R("PULUMI-DESTROY", "pulumi", r"^(destroy|stack\s+rm)\b", 80, "account", "irreversible",
       "tears down every resource in the stack"),
     R("PULUMI-UP", "pulumi", r"^(up|refresh|import)\b", 45, "account", "recoverable",
@@ -701,13 +699,6 @@ RULES = [
       "deletes the cluster and the CloudFormation stacks behind it"),
     R("HEROKU-DESTROY", "heroku", r"(apps:destroy|pg:reset|addons:destroy)", 85, "account",
       "irreversible", "destroys the app or resets the database, add-on data included"),
-    R("GH-REPO-DEL", "gh", r"^repo\s+delete", 75, "account", "irreversible",
-      "deletes the repository with its issues, PRs and releases; the name is then claimable",
-      "`gh repo archive` keeps it readable and reversible"),
-    R("VELERO-DEL", "velero", r"(backup|restore|schedule)\s+delete", 65, "cluster", "irreversible",
-      "deletes a backup: the restore path for that point in time goes with it"),
-    R("ARGOCD-DEL", "argocd", r"^app\s+delete", 60, "cluster", "irreversible",
-      "deleting an Argo CD app cascades to the Kubernetes resources it owns"),
     R("ZFS-DESTROY", "zfs btrfs", r"^(destroy|delete|subvolume delete)\b", 80, "host",
       "irreversible", "destroys a dataset, subvolume or snapshot",
       "`zfs destroy -n -v` prints what would go, snapshots included"),
@@ -721,6 +712,248 @@ RULES = [
       "purges the job from state, not just its allocations"),
     R("S3CMD-RB", "s3cmd", r"^(rb|del|rm)\b", 65, "account", "irreversible",
       "removes objects or a bucket"),
+
+
+    # --- promoted CLIs: enumerated per resource, not classified by verb -----
+    #
+    # Verb classification is a floor, not a measurement: it cannot see that
+    # `openstack volume delete` costs data and `openstack server stop` costs a
+    # reboot, and it cannot see the verbs that lie. These six carry the traffic
+    # and the blast radius, so they are enumerated. Everything else in
+    # RESOURCE_CLIS is still classified — see the CLI-* rules above.
+
+    # vault ------------------------------------------------------------------
+    R("VAULT-READ", "vault", r"^(read|kv\s+get)\b", 15, "account", "reversible",
+      "prints a secret to stdout: from here it is in the scrollback, in the CI log if this "
+      "runs in one, and in whatever consumed it — Vault records the read, it cannot unsend it",
+      "`-field=<key>` prints one value instead of the whole secret, and a short-lived dynamic "
+      "credential beats reading a static one"),
+    R("VAULT-KV-DELETE", "vault", r"^kv\s+delete\b", 35, "account", "recoverable",
+      "`kv delete` is a soft delete: the versions are marked deleted and stay in storage — it "
+      "is `kv destroy` and `kv metadata delete` that are permanent",
+      "`vault kv undelete -versions=N <path>` brings it back"),
+    R("VAULT-KV-DESTROY", "vault", r"^kv\s+(destroy|metadata\s+delete)\b", 70, "account",
+      "irreversible",
+      "removes the version data itself; `kv undelete` cannot bring it back, and "
+      "`kv metadata delete` takes every version and the metadata with them",
+      "`vault kv delete` is the soft form and is recoverable"),
+    R("VAULT-SECRETS-DISABLE", "vault", r"^secrets\s+disable\b", 80, "account", "irreversible",
+      "disabling a secrets mount deletes every secret stored under it, not just the route to "
+      "them",
+      "`vault secrets move` relocates a mount without emptying it"),
+    R("VAULT-AUTH-DISABLE", "vault", r"^auth\s+disable\b", 75, "account", "irreversible",
+      "disabling an auth method revokes every token it issued: every client that authenticates "
+      "this way is locked out at once, including the one running this",
+      "`vault list auth/<path>/role` shows what still comes in through it"),
+    R("VAULT-AUDIT-DISABLE", "vault", r"^audit\s+disable\b", 60, "account", "irreversible",
+      "Vault stops recording who read which secret, and keeps serving requests while it does "
+      "— the gap in the audit trail is silent",
+      "enable the replacement device first; Vault only refuses requests when *every* audit "
+      "device fails"),
+    R("VAULT-LEASE-REVOKE", "vault", r"^lease\s+revoke\b", 65, "account", "irreversible",
+      "revokes leases and the credentials behind them: the database users and cloud keys "
+      "Vault issued are dropped as it goes",
+      "`vault list sys/leases/lookup/<prefix>` first — it prints exactly what would be revoked"),
+    R("VAULT-TOKEN-REVOKE", "vault", r"^token\s+revoke\b", 45, "account", "irreversible",
+      "a token revoke takes its child tokens too, so revoking a parent ends every session "
+      "issued from it"),
+    R("VAULT-POLICY-DELETE", "vault", r"^policy\s+delete\b", 55, "account", "recoverable",
+      "every token and role bound to this policy loses the access it granted, immediately and "
+      "with no error here — it shows up as permission denied somewhere else",
+      "`vault policy read <name>` and keep the HCL before deleting it"),
+    R("VAULT-SEAL", "vault", r"^operator\s+(seal|step-down)\b", 60, "cluster", "recoverable",
+      "sealing Vault stops every client that needs a secret until enough key holders unseal it "
+      "again — which needs the people, not just the command"),
+    R("VAULT-REKEY", "vault", r"^operator\s+(rekey|generate-root|rotate)\b", 70, "cluster",
+      "irreversible",
+      "rekeying invalidates the existing unseal shares: the old ones stop working the moment "
+      "it completes, and losing the new ones loses the cluster"),
+    R("VAULT-RAFT-RESTORE", "vault", r"^operator\s+raft\s+snapshot\s+restore\b", 90, "cluster",
+      "irreversible",
+      "replaces the whole of Vault's storage with the snapshot: every secret, policy, mount and "
+      "token written since it was taken is gone",
+      "take a fresh snapshot first — this is the one operation with no other way back"),
+    R("VAULT-RAFT-PEER", "vault", r"^operator\s+raft\s+remove-peer\b", 65, "cluster",
+      "recoverable",
+      "shrinks the raft quorum; one peer too many and the cluster loses quorum and stops "
+      "serving entirely"),
+
+    # velero -----------------------------------------------------------------
+    R("VELERO-BACKUP-CREATE", "velero", r"^backup\s+create\b", 10, "cluster", "reversible",
+      "takes a backup: the cost is load on the cluster and object storage, not data"),
+    R("VELERO-BACKUP-DELETE", "velero", r"^backup\s+delete\b", 70, "cluster", "irreversible",
+      "deletes the backup and the objects behind it in storage: that point in time stops being "
+      "restorable, and you find out at the restore",
+      "`velero backup describe <name>` — check something newer covers the same namespaces"),
+    R("VELERO-RESTORE-DELETE", "velero", r"^restore\s+delete\b", 35, "cluster", "recoverable",
+      "deletes the restore *record*, not what it restored — the objects it created stay in the "
+      "cluster, now with nothing describing where they came from"),
+    R("VELERO-RESTORE-CREATE", "velero", r"^restore\s+create\b", 50, "cluster", "irreversible",
+      "a restore writes into a live cluster: existing objects are skipped by default, but the "
+      "ones it does create are hard to tell apart from what was already there afterwards",
+      "`--namespace-mappings old:scratch` restores into a scratch namespace you can inspect"),
+    R("VELERO-SCHEDULE", "velero", r"^schedule\s+(delete|pause)\b", 55, "cluster", "recoverable",
+      "nothing breaks today: backups simply stop being taken, and the cost lands at the next "
+      "restore instead",
+      "`velero schedule get` to confirm what else still covers these namespaces"),
+    R("VELERO-LOCATION-DELETE", "velero",
+      r"^(backup-location|snapshot-location)\s+delete\b", 65, "cluster", "irreversible",
+      "removes the storage location: every backup that lives there stops being visible to "
+      "Velero, whether or not the bucket still holds it"),
+    R("VELERO-UNINSTALL", "velero", r"^uninstall\b", 75, "cluster", "irreversible",
+      "removes Velero and its CRDs — the Backup and Restore objects describing every existing "
+      "backup go with them, leaving data in the bucket with nothing that can read it",
+      "keep the backup storage location and its bucket; a reinstall can re-sync from it"),
+
+    # argocd -----------------------------------------------------------------
+    R("ARGOCD-APP-DELETE", "argocd", r"^app\s+delete\b", 60, "cluster", "irreversible",
+      "deleting an application cascades by default: the Kubernetes resources it manages are "
+      "deleted with it",
+      "`--cascade=false` removes the Argo CD record and leaves the workloads running"),
+    R("ARGOCD-APP-SYNC", "argocd", r"^app\s+sync\b", 40, "cluster", "recoverable",
+      "applies whatever is in git to the cluster right now — including a commit nobody has "
+      "reviewed yet, because sync does not care why HEAD moved",
+      "`argocd app diff` prints what would change, and `--dry-run` runs it without applying",
+      subsumes="PURGE-FLAG FORCE"),
+    R("ARGOCD-PROJ-DELETE", "argocd", r"^(proj|project)\s+delete\b", 70, "cluster",
+      "irreversible",
+      "deleting a project takes every application in it, and each of those cascades to its own "
+      "cluster resources"),
+    R("ARGOCD-CLUSTER-RM", "argocd", r"^cluster\s+rm\b", 45, "cluster", "recoverable",
+      "`cluster rm` de-registers the cluster from Argo CD — it does not touch the cluster. The "
+      "applications targeting it stop being reconciled and drift silently from here",
+      "`argocd app list --dest-server <url>` shows what stops being managed"),
+    R("ARGOCD-REPO-RM", "argocd", r"^repo\s+rm\b", 40, "cluster", "recoverable",
+      "removes the repository credentials: every application sourced from it fails to refresh, "
+      "with no change to what is already running"),
+    R("ARGOCD-ADMIN-IMPORT", "argocd", r"^admin\s+import\b", 70, "cluster", "irreversible",
+      "replaces Argo CD's stored state with the contents of the export: applications and "
+      "projects that are not in the file are deleted",
+      "`argocd admin export > backup.yaml` first"),
+
+    # openstack --------------------------------------------------------------
+    R("OS-SERVER-POWER", "openstack",
+      r"^server\s+(stop|reboot|shelve|suspend|pause|rescue|unset)\b", 30, "account",
+      "recoverable", "stops or reboots the instance; the disk and the ports survive it"),
+    R("OS-SERVER-DELETE", "openstack", r"^server\s+delete\b", 70, "account", "irreversible",
+      "deletes the instance and its ephemeral disk; a boot-from-volume instance keeps its root "
+      "volume only if it was not created with delete-on-termination",
+      "`openstack server shelve` frees the compute and keeps the instance"),
+    R("OS-VOLUME-DELETE", "openstack", r"^volume\s+delete\b", 80, "account", "irreversible",
+      "the data on the volume goes with it, and `--force` deletes it even while an instance "
+      "still has it attached",
+      "`openstack volume snapshot create` first — the snapshot is the only way back"),
+    R("OS-SNAPSHOT-DELETE", "openstack",
+      r"^(backup|volume\s+snapshot|image\s+snapshot)\s+delete\b", 65, "account",
+      "irreversible", "removes a restore point for a volume that is still running"),
+    R("OS-IMAGE-DELETE", "openstack", r"^image\s+delete\b", 60, "account", "irreversible",
+      "instances already running are unaffected; everything that rebuilds, autoscales or "
+      "launches from this image fails from now on"),
+    R("OS-PROJECT-DELETE", "openstack", r"^project\s+delete\b", 60, "account", "irreversible",
+      "deleting a project does not delete what is in it: the servers, volumes and floating IPs "
+      "keep running and keep billing, with no project left to manage them through",
+      "`openstack project purge --project <id>` removes the resources first — then delete it"),
+    R("OS-PROJECT-PURGE", "openstack", r"^project\s+purge\b", 88, "account", "irreversible",
+      "deletes every resource the project owns — servers, volumes, images, networks — in one "
+      "call",
+      "`--dry-run` prints the list without touching any of it"),
+    R("OS-STACK-DELETE", "openstack", r"^stack\s+delete\b", 85, "account", "irreversible",
+      "a Heat stack delete removes every resource the template created, database volumes "
+      "included"),
+    R("OS-NETWORK-DELETE", "openstack",
+      r"^(network|subnet|router|port)\s+delete\b", 70, "network", "irreversible",
+      "removing the network takes the ports on it: every instance attached loses connectivity, "
+      "and on a cloud you administer remotely this is how you lock yourself out"),
+    R("OS-CATALOG-DELETE", "openstack", r"^(endpoint|service)\s+delete\b", 75, "account",
+      "irreversible",
+      "the service catalog is how every client finds this region's APIs — removing an entry "
+      "makes that service unreachable region-wide without touching anything it manages"),
+    R("OS-USER-DELETE", "openstack", r"^(user|role|group)\s+delete\b", 55, "account",
+      "irreversible",
+      "the tokens stop working immediately; resources the user owned keep running, now with "
+      "nobody who can reach them"),
+    R("OS-SG-RULE", "openstack", r"^security\s+group\s+rule\s+create\b", 30, "network",
+      "reversible",
+      "opens a port to whatever `--remote-ip` names — the range is the whole of the decision",
+      "name a CIDR you control; `0.0.0.0/0` is the entire internet"),
+
+    # flyctl -----------------------------------------------------------------
+    R("FLY-DEPLOY", "flyctl fly", r"^deploy\b", 35, "account", "recoverable",
+      "rolls the app forward to a new release",
+      "`fly releases` lists what to roll back to, and `fly deploy --image <ref>` does it"),
+    R("FLY-SECRETS", "flyctl fly", r"^secrets\s+(set|unset|import)\b", 40, "account",
+      "recoverable",
+      "setting a secret restarts every machine in the app — this is a deploy, not a config "
+      "write, and it happens the moment the command returns",
+      "`--stage` stores the secret without restarting; the next deploy picks it up"),
+    R("FLY-SCALE-ZERO", "flyctl fly", r"^scale\s+count\s+0\b", 55, "account", "recoverable",
+      "zero machines is an outage: nothing is deleted and scaling back up restores it, but the "
+      "app is off until you do"),
+    R("FLY-MACHINE-DESTROY", "flyctl fly", r"^machines?\s+(destroy|remove)\b", 55, "account",
+      "recoverable",
+      "destroys one machine — the app, its volumes and its config survive, and `fly deploy` "
+      "recreates it"),
+    R("FLY-VOLUME-DESTROY", "flyctl fly", r"^volumes?\s+(destroy|delete)\b", 85, "account",
+      "irreversible",
+      "a Fly volume is a single local disk, not a replicated one: this destroys the only copy "
+      "of the data on it",
+      "`fly volumes snapshots list <id>` — snapshots are kept about five days and are the only "
+      "way back"),
+    R("FLY-APPS-DESTROY", "flyctl fly", r"^apps\s+destroy\b", 80, "account", "irreversible",
+      "destroys the app with its machines and its volumes, and releases the name for anyone "
+      "else to claim",
+      "`fly scale count 0` stops it running and billing without destroying anything"),
+    R("FLY-PG-DETACH", "flyctl fly", r"^(postgres|pg|mysql)\s+(detach|db\s+delete)\b", 65,
+      "account", "irreversible",
+      "detaching drops the database user and removes DATABASE_URL from the app: the app loses "
+      "its database at the next restart, not at this command"),
+    R("FLY-CERTS-REMOVE", "flyctl fly", r"^certs\s+remove\b", 45, "network", "recoverable",
+      "removes the certificate for that hostname; requests to it stop being served over HTTPS "
+      "until a new one is issued and validated"),
+
+    # gh ---------------------------------------------------------------------
+    R("GH-REPO-ARCHIVE", "gh", r"^repo\s+archive\b", 20, "account", "recoverable",
+      "makes the repository read-only and can be undone — the reversible alternative to "
+      "`repo delete`"),
+    R("GH-REPO-DEL", "gh", r"^repo\s+delete\b", 75, "account", "irreversible",
+      "deletes the repository with its issues, PRs and releases; the name is then claimable by "
+      "anyone",
+      "`gh repo archive` keeps it readable and reversible"),
+    R("GH-PR-MERGE", "gh", r"^pr\s+merge\b", 40, "account", "recoverable",
+      "merges into the base branch — on a repository that deploys on merge, this is the deploy",
+      "`--auto` waits for the required checks instead of merging now"),
+    R("GH-RELEASE-DELETE", "gh", r"^release\s+delete\b", 55, "account", "irreversible",
+      "deletes the release and every asset attached to it: anything pinned to those download "
+      "URLs breaks, including other people's CI",
+      "`gh release edit <tag> --draft` hides it and keeps the assets"),
+    R("GH-ISSUE-DELETE", "gh", r"^issue\s+delete\b", 50, "account", "irreversible",
+      "GitHub has no undo for a deleted issue: the thread, its comments and every "
+      "cross-reference to it go",
+      "closing it keeps the history and is reversible"),
+    R("GH-RUN-DELETE", "gh", r"^(run\s+delete|cache\s+delete)\b", 35, "account", "irreversible",
+      "deletes the run and its logs — the record of what CI actually did is the thing being "
+      "removed"),
+    R("GH-SECRET", "gh", r"^(secret|variable)\s+(set|delete)\b", 40, "account", "recoverable",
+      "changes what every workflow in this repository runs with; `secret delete` cannot be "
+      "undone without the original value, which by design nothing here can read back"),
+    R("GH-WORKFLOW-RUN", "gh", r"^workflow\s+run\b", 35, "account", "recoverable",
+      "triggers a workflow: what it does is whatever the workflow does, which on a deploy "
+      "pipeline is a deploy"),
+    R("GH-AUTH-TOKEN", "gh", r"^auth\s+token\b", 35, "account", "reversible",
+      "prints the OAuth token to stdout, where it lands in scrollback and in the CI log if "
+      "this runs in one",
+      "let `gh` make the authenticated call instead of extracting the token"),
+    R("GH-API-WRITE", "gh", r"^api\b(?=.*(?:-X|--method)[= ]?(?:POST|PUT|PATCH))", 45,
+      "account", "recoverable",
+      "`gh api` is the raw REST API: the verb that matters is in `-X`, and nothing else on the "
+      "command line says what this changes",
+      "run it with `--method GET` first and read what the endpoint returns"),
+    R("GH-API-DELETE", "gh", r"^api\b(?=.*(?:-X|--method)[= ]?DELETE)", 70, "account",
+      "irreversible",
+      "a DELETE through `gh api` is whatever that endpoint deletes — `/repos/{owner}/{repo}` "
+      "is the repository itself — and no verb in the command line says so",
+      "check the endpoint in the REST docs; `gh` has a named command for most of the "
+      "destructive ones, and those prompt"),
 
     R("CM-ANSIBLE", "ansible ansible-playbook", None, 40, "cluster", "recoverable",
       "runs against every host in the inventory pattern at once",
@@ -867,8 +1100,10 @@ AMPS = [
       r"no-input|approve|batch|accept-all|skip-confirmation)\b|(^|\s)-[a-zA-Z]*y(\s|$)", 8,
       "auto-confirms every prompt, including the ones you would have stopped at — the last "
       "human checkpoint before this runs"),
+    # `--cascade=false` is the opposite of a purge, so the negated forms are
+    # excluded rather than counted as the thorough variant they name.
     A("PURGE-FLAG", None, r"--(purge|prune|wipe|hard|cascade|destroy-data|delete-data|"
-                          r"remove-data|permanent)\b", 12,
+                          r"remove-data|permanent)\b(?![= ]?(false|no|off|none)\b)", 12,
       "asks for the thorough variant: state that would otherwise survive goes too"),
     A("SECRET-IN-ARGV", None,
       r"--(password|passwd|token|api-key|apikey|secret|access-key|private-key)[= ]\S|"
@@ -905,6 +1140,31 @@ AMPS = [
       "this is the daemon your session depends on", "host"),
     A("HISTFILE", None, r"unset\s+HISTFILE|HISTFILE=/dev/null|set \+o history", 30,
       "disables shell history: the audit trail stops here", "host", "irreversible"),
+
+    # --- flags that only mean something on one CLI ---------------------------
+    A("VAULT-LEASE-PREFIX", "vault", r"^lease\s+revoke\b(?=.*(^|\s)-prefix\b)", 15,
+      "`-prefix` revokes every lease under the path rather than the one named", "account"),
+    A("VAULT-LEASE-FORCE", "vault", r"^lease\s+revoke\b(?=.*(^|\s)-force\b)", 20,
+      "vault's `-force` drops the lease without revoking the credential behind it: the database "
+      "user or cloud key stays live with nothing left tracking its expiry",
+      "account", "irreversible"),
+    A("VELERO-OVERWRITE", "velero", r"--existing-resource-policy[= ]update", 20,
+      "restores over objects that already exist: live resources are overwritten with the state "
+      "in the backup", "cluster", "irreversible"),
+    A("ARGOCD-PRUNE", "argocd", r"--prune\b", 25,
+      "`--prune` deletes cluster resources that are no longer in git — anything created outside "
+      "Argo CD goes with them", "cluster", "irreversible"),
+    A("ARGOCD-REPLACE", "argocd", r"--(replace|force)\b", 15,
+      "argocd's `--replace`/`--force` delete and recreate each resource instead of patching it: "
+      "pods restart, and anything holding local state comes back empty", "cluster"),
+    A("FLY-IMMEDIATE", "flyctl fly", r"--strategy[= ]immediate", 25,
+      "the immediate strategy stops every machine before starting the new ones — a full outage, "
+      "not a rolling deploy", "account"),
+    A("GH-ADMIN", "gh", r"--admin\b", 22,
+      "`--admin` merges past branch protection: required reviews and status checks are bypassed",
+      "account"),
+    A("GH-CLEANUP-TAG", "gh", r"--cleanup-tag\b", 12,
+      "deletes the git tag as well as the release, so the commit it pointed at is no longer named"),
 ]
 
 # Softeners: the same command, asked for in a way that leaves you an out. A
@@ -922,12 +1182,22 @@ SOFTENERS = [
       "`--limit` narrows the run to part of the inventory rather than the whole fleet"),
     A("FORCE-WITH-LEASE", "git", r"--force-with-lease", -5,
       "refuses to overwrite the remote if it moved since you last fetched"),
+    A("ARGOCD-NO-CASCADE", "argocd", r"--cascade[= ]?false", -20,
+      "`--cascade=false` removes the Argo CD record only: the Kubernetes resources it manages "
+      "stay running"),
+    A("FLY-STAGE", "flyctl fly", r"--stage\b", -15,
+      "`--stage` stores the secret without restarting the app; the next deploy applies it"),
+    A("GH-AUTO-MERGE", "gh", r"--auto\b", -12,
+      "`--auto` queues the merge behind the required checks instead of merging now"),
 ]
 
 DAMPENERS = [
     (re.compile(r"--dry-run(?![= ]?(none|server))|--dryrun|--what-if|--no-act|(^|\s)--check(\s|$)"),
      "--dry-run: reports what it would do and changes nothing"),
     (re.compile(r"(^|\s)-n(\s|$)"), None),  # only honoured for the bins below
+    # vault prints the equivalent curl invocation and makes no request at all.
+    (re.compile(r"-output-curl-string\b"),
+     "-output-curl-string: prints the request as curl and sends nothing"),
 ]
 DRY_RUN_N_BINS = {"rsync", "mv", "cp", "ln", "make", "ansible-playbook", "fsck", "e2fsck",
                   "patch", "git"}
@@ -962,6 +1232,1107 @@ PATH_SENSITIVE = {
     "rm", "rmdir", "unlink", "shred", "wipe", "mv", "cp", "rsync", "chmod", "chown", "chgrp",
     "truncate", "dd", "tar", "install", "ln", "tee", "find", "chattr", "mkfs", "wipefs",
 }
+
+# ------------------------------------------------------------------ why ---
+
+# The long form for a rule: the class of incident it exists to prevent.
+#
+# Keyed by rule or amplifier id and validated by the suite — an entry naming
+# something that does not exist fails the tests, which is the drift the notes
+# would otherwise be prone to. Kept beside the rule table rather than inside it
+# because that table is read top to bottom as a catalogue, and sixty paragraphs
+# threaded through it would stop that working.
+#
+# Not every rule has one. `--why` says so plainly rather than printing a
+# formulaic paragraph: a body people learn to skip is worse than an admission
+# that the note has not been written yet.
+INCIDENTS = {
+    # --- filesystem and devices --------------------------------------------
+    "FS-RM": (
+        "The command everyone has already run wrong once. `rm` has no undo and "
+        "no trash: the kernel unlinks the inode and the space is reusable "
+        "immediately, so recovery means an unmounted filesystem and a "
+        "forensics tool, not a command. The dangerous shape is not `rm file`, "
+        "it is `rm` with a variable that was empty, a glob that matched more "
+        "than it did when you tested, or a relative path run from a directory "
+        "you were not in. `-r` turns one mistake into a subtree and `-f` "
+        "removes the prompt that would have shown you the mistake, which is "
+        "why they are scored on top rather than folded in."
+    ),
+    "FS-SED-I": (
+        "In-place edit with no backup suffix. `sed -i` writes a new file and "
+        "renames it over the original, so the previous contents are gone the "
+        "instant the command returns — there is no staging area and nothing to "
+        "diff against. The incident is a regex that matched more lines than "
+        "intended across a `find -exec` or a glob, discovered after the "
+        "commit. `sed -i.bak` costs one character and leaves the original next "
+        "to the edited file."
+    ),
+    "FS-MKFS": (
+        "Making a filesystem writes a new superblock over whatever was there. "
+        "The classic incident is a device name that moved: `/dev/sdb` is not a "
+        "stable identifier, and a disk added, removed or enumerated in a "
+        "different order between the check and the command points the same "
+        "name at different hardware. Partitioning tools belong here for the "
+        "same reason. Use `/dev/disk/by-id/…` or a UUID, and run `lsblk` "
+        "immediately before, not five minutes before."
+    ),
+    "FS-CRYPT": (
+        "Formatting or erasing a LUKS device destroys the key slots. The data "
+        "is still on the platters and is now permanently unreadable: without "
+        "the master key there is no recovery path at any budget. `luksFormat` "
+        "on a device that already held a volume is the incident, and it looks "
+        "identical to the first-time setup it is usually copied from. Take a "
+        "header backup (`cryptsetup luksHeaderBackup`) before touching key "
+        "slots on anything that holds data."
+    ),
+    "FS-DISCARD": (
+        "A discard or secure-erase tells the drive itself to forget. Unlike a "
+        "delete, this is honoured by the flash translation layer, so undelete "
+        "tools have nothing to find — the blocks are genuinely gone, not "
+        "merely unreferenced. This is the intended behaviour when "
+        "decommissioning hardware and a total loss when the device is still in "
+        "service. There is no partial version of it to try first."
+    ),
+    "FS-ZPOOL": (
+        "Destroying or splitting a pool takes every dataset, snapshot and "
+        "clone it holds in one operation — a pool is the unit, not the "
+        "dataset. `zpool destroy` can sometimes be reversed with `zpool import "
+        "-D` if nothing has reused the disks, but that is a rescue, not a "
+        "plan. The frequent incident is destroying the pool when the intent "
+        "was one filesystem on it."
+    ),
+    "LVM-REMOVE": (
+        "Removing a logical volume, volume group or RAID superblock discards "
+        "the metadata that says where the data lives. The extents are still on "
+        "disk but nothing can find them, and `mdadm --zero-superblock` on the "
+        "wrong member turns a degraded array into an unassembled one. Recovery "
+        "means reconstructing the exact original layout by hand. Keep "
+        "`vgcfgbackup` output somewhere off the machine."
+    ),
+    "FS-RESIZE": (
+        "Shrinking is the direction that loses data. Growing a filesystem is "
+        "routine; reducing one below the extent of its used blocks, or "
+        "reducing the logical volume before the filesystem on it, truncates "
+        "live data with no warning from either layer. `xfs_growfs` is here "
+        "because XFS cannot shrink at all, so the operation people reach for "
+        "next is a dump, mkfs and restore."
+    ),
+    "MAC-DISKUTIL": (
+        "Erase and reformat verbs on macOS take a volume identifier that is "
+        "easy to get wrong — `disk2` and `disk2s1` are one character apart and "
+        "mean the whole device or one volume on it. APFS container deletion "
+        "takes every volume inside the container, which on a Mac is usually "
+        "the system and the data volume together."
+    ),
+
+    # --- permissions and privilege -----------------------------------------
+    "PRIV-CHMOD": (
+        "Permissions are load-bearing in places that give no error until much "
+        "later. World-writable is the obvious one — any local user or "
+        "compromised process can rewrite the file — but the quieter incident "
+        "is a recursive chmod that strips the execute bit from directories, "
+        "which makes them untraversable, or adds it to every file in a tree. "
+        "SSH refuses to use a private key whose mode is too open, and sudo "
+        "refuses a sudoers file whose mode is wrong, which is how a broad "
+        "chmod locks you out of the machine you are fixing."
+    ),
+    "SEC-IAM-ADMIN": (
+        "Attaching an administrator policy is not a deployment step, it is a "
+        "grant of everything. The incident is the debugging shortcut that "
+        "survives: a wildcard policy attached to unblock a failing pipeline, "
+        "never narrowed, and later inherited by every workload assuming that "
+        "role. It does not break anything, which is precisely why nobody "
+        "revisits it. Scope to the actions the caller actually failed on."
+    ),
+    "SEC-K8S-ADMIN": (
+        "`cluster-admin` bound to a service account gives every pod using it "
+        "the API rights to read every secret in the cluster and to schedule "
+        "anything anywhere. The usual route in is a Helm chart or an operator "
+        "that asks for it to avoid enumerating what it needs. A compromise of "
+        "one workload then reaches the whole cluster, and the binding is "
+        "invisible in the workload's own manifests."
+    ),
+    "SEC-S3-PUBLIC": (
+        "A public-read ACL or bucket policy is the single most common cause of "
+        "an accidental data disclosure. The bucket usually holds exactly what "
+        "you would expect it to — backups, exports, uploaded user files — and "
+        "the change is made to fix a 403 on one object. Public buckets are "
+        "indexed by scanners within minutes, so 'briefly public' is not a "
+        "thing that exists."
+    ),
+    "SEC-GCP-ALLUSERS": (
+        "`allUsers` and `allAuthenticatedUsers` are not 'everyone in my "
+        "organisation' — the first is the internet and the second is every "
+        "Google account in existence. Both are routinely added to make a "
+        "static asset load, and both grant whatever role is named to the whole "
+        "world, which is rarely the reader role people assume."
+    ),
+    "SEC-IAM-KEY": (
+        "A long-lived access key is a credential with no expiry that will end "
+        "up in a repository, a CI variable, or a laptop backup. The incident "
+        "is not the creation, it is that the key outlives the reason for it by "
+        "years and nobody can say what still uses it. Prefer a role, an OIDC "
+        "trust or a short-lived session; if a key is genuinely needed, record "
+        "where it went at the moment it was made."
+    ),
+
+    # --- system and boot ----------------------------------------------------
+    "SYS-POWER": (
+        "Rebooting a machine you reached over SSH is a bet that it comes back. "
+        "The failure mode is not the reboot, it is what was only true in "
+        "memory: a network config applied but never written, a filesystem "
+        "mounted by hand, a kernel that was updated but whose bootloader entry "
+        "was not. On a remote host with no console, a machine that does not "
+        "come back is a support ticket with a datacentre."
+    ),
+    "SYS-POWER-CTL": (
+        "Same failure as a direct `reboot`, reached through systemd. Worth "
+        "distinguishing because `systemctl` is also the tool for routine "
+        "service work, so the power verbs sit one word away from commands "
+        "people run all day."
+    ),
+    "SYS-MASK": (
+        "Masking symlinks a unit to `/dev/null` so it cannot be started — not "
+        "by a dependency, not by an admin who does not know it was masked, not "
+        "after a reboot. That is stronger than `disable` and much harder to "
+        "diagnose: the service simply never comes up, and `systemctl start` "
+        "reports success in some versions. Mask deliberately, and leave a note "
+        "where the next person will look."
+    ),
+    "SYS-INIT": (
+        "Changing the runlevel out from under a running system stops every "
+        "service not in the target, which on a remote host includes the one "
+        "you are connected through. `telinit 1` in particular drops to single "
+        "user and takes networking with it."
+    ),
+    "BOOT-KEXEC": (
+        "`kexec` jumps straight into a new kernel without firmware "
+        "re-initialisation. When the target kernel or initrd is wrong there is "
+        "no BIOS POST to fall back through and no bootloader menu — the "
+        "machine is simply gone until someone power-cycles it, and on cloud "
+        "hardware that means a console session you may not have."
+    ),
+
+    # --- networking ---------------------------------------------------------
+    "NET-IPTABLES": (
+        "Firewall edits are applied to the live packet path immediately. The "
+        "incident is always the same shape: a rule that removes the one "
+        "allowing your own session, discovered because the shell stops "
+        "responding mid-command with no way back in. Anything that flushes a "
+        "chain removes the accept rules along with the deny ones."
+    ),
+    "NET-IPTABLES-P": (
+        "Setting a chain's default policy to DROP takes effect before you add "
+        "the rules that would have let you back in. This is the canonical "
+        "remote lockout — the connection dies during the command that caused "
+        "it, so there is no prompt and no chance to revert. Schedule a "
+        "`iptables-restore` from a saved ruleset on a timer before you start, "
+        "and cancel it once you are still connected."
+    ),
+    "NET-CONNTRACK": (
+        "Flushing connection tracking drops every NAT mapping the host holds. "
+        "Established connections through it break mid-stream — not refused, "
+        "just silently stalled until each end times out — and on a NAT gateway "
+        "that is every flow for every client behind it at once."
+    ),
+    "NET-NETNS": (
+        "Deleting a network namespace takes its interfaces with it, and "
+        "anything running inside it loses connectivity with no log line "
+        "explaining why. On a container or virtualisation host, a namespace is "
+        "usually a workload's entire network."
+    ),
+
+    # --- packages -----------------------------------------------------------
+    "PKG-REMOVE": (
+        "Package removal is scored on what the solver decides to take with it. "
+        "Removing one library can cascade into a desktop environment or, on a "
+        "server, into the very tooling you were about to use to fix things — "
+        "`apt remove` printing a list nobody reads is the setup for most of "
+        "these. Read the list. `--purge` additionally deletes configuration "
+        "that a reinstall will not bring back."
+    ),
+    "PKG-PUBLISH": (
+        "Publishing is public and, on most registries, permanent: npm, PyPI "
+        "and crates.io all restrict or forbid deleting a version once anything "
+        "may depend on it. The incident is a package published from a dirty "
+        "working tree, or with credentials or an internal path baked into the "
+        "artifact, which cannot then be unpublished. Build from a clean "
+        "checkout and inspect the tarball before the upload."
+    ),
+
+    # --- git ----------------------------------------------------------------
+    "GIT-PUSH-F": (
+        "A force push replaces the remote branch. Commits that were only on "
+        "the remote — someone else's work pushed between your fetch and your "
+        "push — become unreferenced, and on a hosted forge they are garbage "
+        "collected without warning. The other half of the incident is "
+        "everyone's local checkout: their next pull is a conflict they did not "
+        "cause. `--force-with-lease` refuses when the remote moved under you, "
+        "which is exactly the case that loses work."
+    ),
+    "GIT-RESET": (
+        "`reset --hard` discards the working tree and the index against the "
+        "target commit. Committed work is recoverable through the reflog for "
+        "as long as it lasts; uncommitted work is not recoverable at all, "
+        "because git never saw it. The incident is running it to 'clean up' "
+        "with an edit in progress somewhere in the tree."
+    ),
+    "GIT-CLEAN": (
+        "`git clean -fdx` deletes untracked files, and untracked is not the "
+        "same as unimportant: `.env`, local configuration, uncommitted "
+        "scratch work and anything a `.gitignore` deliberately keeps out of "
+        "the repository all go. Git has never seen these files, so nothing in "
+        "git can bring them back. `-n` prints the list first."
+    ),
+    "GIT-REFLOG-EXPIRE": (
+        "The reflog is the safety net under every other git mistake — it is "
+        "what makes a bad `reset --hard` or rebase recoverable. Expiring it "
+        "and running `gc --prune=now` removes that net and makes every "
+        "previously recoverable operation permanent. It is usually run to "
+        "reclaim disk space, which it does badly compared to the cost."
+    ),
+    "GIT-PUSH-MIRROR": (
+        "`push --mirror` makes the remote match the local repository exactly: "
+        "every branch and tag the remote has and you do not is deleted, not "
+        "merged. Run against the wrong remote — a fork, or an upstream you "
+        "have push rights to — it removes other people's branches wholesale."
+    ),
+    "GIT-PUSH-DEL": (
+        "Deleting a remote branch or tag removes the only name pointing at "
+        "that history. For a tag this is worse than it looks: release tooling, "
+        "deployment pipelines and other people's lockfiles may reference it, "
+        "and re-creating a tag at a different commit is how you get two builds "
+        "that disagree about what a version contains."
+    ),
+    "GIT-REWRITE": (
+        "History rewriting changes every commit hash from the rewrite point "
+        "forward. Signatures break, existing references from issues and "
+        "reviews point at commits that no longer exist, and every collaborator "
+        "has to reset rather than pull. Doing it to remove a leaked secret "
+        "also does not remove it: the old objects survive in forks, caches and "
+        "the forge's own reflogs, so the credential still has to be rotated."
+    ),
+    "GIT-CHECKOUT-F": (
+        "A forced checkout overwrites local modifications without asking. It "
+        "is the fastest way to lose an hour of uncommitted work, and it is "
+        "usually reached for because git refused the safe version — that "
+        "refusal was the warning."
+    ),
+    "GIT-STASH-CLEAR": (
+        "`stash clear` drops every stash entry at once. Entries are "
+        "recoverable through dangling commits for a while, but the recovery is "
+        "obscure enough that in practice this is a delete. People run it to "
+        "tidy up and lose the one stash from three months ago that mattered."
+    ),
+
+    # --- containers ---------------------------------------------------------
+    "CTR-VOLUME-RM": (
+        "A named volume is where a container keeps the state that is supposed "
+        "to outlive it — the database directory, the uploads, the certificate "
+        "cache. Removing one deletes that data, and the volume's name usually "
+        "gives no clue what it held. Nothing in Docker versions or snapshots "
+        "volumes, so the only copy is whatever backup you took yourself."
+    ),
+    "CTR-PRUNE": (
+        "Prune deletes everything the daemon considers unused, and 'unused' is "
+        "the daemon's definition, not yours: a stopped container you meant to "
+        "restart, an image you built and never tagged, and with `--volumes` "
+        "the data of any container that is not currently running. On a shared "
+        "or CI host this reaches other people's work."
+    ),
+    "CTR-RM": (
+        "Removing a container discards its writable layer — anything written "
+        "inside it that was not on a mounted volume. The incident is a "
+        "container someone shelled into to fix something live, removed during "
+        "cleanup before that fix was written down anywhere."
+    ),
+
+    # --- kubernetes ---------------------------------------------------------
+    "K8S-DELETE": (
+        "A `kubectl delete` is applied to whatever the selector matches at the "
+        "moment it runs, which is not necessarily what it matched when you "
+        "tested it. Deleting a controller cascades to what it owns by default. "
+        "The scariest form is a label selector with a typo that matches "
+        "nothing — harmless — sitting one character away from one that matches "
+        "everything."
+    ),
+    "K8S-DELETE-NS": (
+        "Deleting a namespace deletes every object inside it, PersistentVolume "
+        "Claims included, and with a Delete reclaim policy the underlying "
+        "volumes go too. It is also asynchronous and hard to stop: the "
+        "namespace enters Terminating and the cascade continues while you read "
+        "the output. There is no partial undo."
+    ),
+    "K8S-DELETE-CRD": (
+        "Deleting a CustomResourceDefinition deletes every custom resource of "
+        "that kind across the whole cluster, in every namespace, immediately. "
+        "The objects are removed by the API server itself, so an operator "
+        "watching them sees deletions and acts on them — which for a database "
+        "or storage operator means real infrastructure. This is the single "
+        "largest blast radius available from one kubectl command."
+    ),
+    "K8S-DELETE-PVC": (
+        "A PVC delete releases the PersistentVolume behind it, and with the "
+        "default Delete reclaim policy the storage class then destroys the "
+        "actual disk. The pod may still be running and writing when this "
+        "happens. Check the reclaim policy before, not after."
+    ),
+    "K8S-DRAIN": (
+        "Draining evicts every pod on a node. That is routine when the rest of "
+        "the cluster has room and PodDisruptionBudgets are honest, and an "
+        "outage when it does not — the pods have nowhere to reschedule and "
+        "sit Pending. Draining several nodes in sequence without waiting for "
+        "the previous one to settle is how a rolling maintenance becomes a "
+        "cold cluster."
+    ),
+    "K8S-SCALE-0": (
+        "Scaling to zero is an outage with a tidy audit trail: nothing is "
+        "deleted, the deployment still exists, and the service simply stops "
+        "serving. It is recoverable in one command, which is why it is scored "
+        "below a delete — but the recovery only starts once someone notices."
+    ),
+
+    # --- infrastructure as code ---------------------------------------------
+    "IAC-APPLY": (
+        "Apply is where the plan stops being hypothetical. The incident is "
+        "applying a plan generated against a different workspace, variable "
+        "file or state than the one now in effect — Terraform will happily "
+        "reconcile you to a configuration that was written for staging. "
+        "Anything the diff shows as replace rather than update is a destroy "
+        "followed by a create, and for a database that is the whole of it."
+    ),
+    "IAC-DESTROY": (
+        "`destroy` tears down every resource in the state, in dependency "
+        "order, including the ones nobody remembers are in there. The usual "
+        "incident is the wrong workspace or the wrong `-var-file`, in a shell "
+        "where the last apply was against something else. Data resources with "
+        "no deletion protection — RDS instances, S3 buckets, EBS volumes — go "
+        "with everything else."
+    ),
+    "IAC-STATE-RM": (
+        "Removing something from state does not remove it from the cloud: it "
+        "removes Terraform's knowledge of it. The resource keeps running and "
+        "keeps billing, unmanaged, and the next apply tries to create a second "
+        "one — which either conflicts on a unique name or quietly doubles the "
+        "infrastructure. This is the verb most often reached for in a hurry "
+        "during an incident."
+    ),
+    "IAC-WORKSPACE": (
+        "Workspaces are the mechanism people use to keep production and "
+        "staging apart, so selecting or deleting the wrong one aims every "
+        "subsequent command at the wrong environment. `workspace delete` "
+        "discards a state file, which orphans everything that state described."
+    ),
+
+    # --- aws / gcp / azure --------------------------------------------------
+    "AWS-S3-RB": (
+        "Removing a bucket with `--force` empties it first: every object and "
+        "every version, in one call, with no progress you can act on. Bucket "
+        "names are globally unique and immediately claimable by anyone once "
+        "released, so even a rebuild does not necessarily get the name back."
+    ),
+    "AWS-S3-RM-R": (
+        "A recursive `s3 rm` is a prefix delete, and S3 prefixes are not "
+        "directories — `s3://bucket/logs` and `s3://bucket/logs-archive` share "
+        "a prefix. A missing trailing slash is the whole incident. Versioning "
+        "helps only if it was on before the delete, and a lifecycle rule may "
+        "then expire the delete markers anyway."
+    ),
+    "AWS-EC2-TERM": (
+        "Terminate is not stop. Instance store volumes are lost, and EBS "
+        "volumes created with DeleteOnTermination — which is the default for "
+        "the root volume — are deleted with the instance. The Elastic IP is "
+        "released or, worse, silently kept and billed. `stop` is the verb for "
+        "'I want this to cost less'."
+    ),
+    "AWS-RDS-DEL": (
+        "Deleting a database instance with `--skip-final-snapshot` removes the "
+        "one artefact that would have made it recoverable. Automated backups "
+        "are deleted with the instance unless they were explicitly retained, "
+        "so the flag added to make the command succeed is the flag that makes "
+        "it terminal."
+    ),
+    "AWS-KMS-DEL": (
+        "Scheduling a KMS key for deletion is the rare AWS operation with a "
+        "genuine point of no return: after the waiting period the key material "
+        "is destroyed and every object encrypted with it is permanently "
+        "unreadable, including backups and snapshots. Disable the key first "
+        "and watch for the access denied errors that tell you what still uses "
+        "it — that list is never what you expect."
+    ),
+    "AWS-IAM-DEL": (
+        "Deleting a role, policy or user breaks whatever was authenticating or "
+        "authorising through it, and IAM gives no dependency list. The failure "
+        "surfaces somewhere else entirely, minutes or hours later, as an "
+        "AccessDenied in a service nobody connected to this change. Detach and "
+        "watch before deleting."
+    ),
+    "AWS-ORG": (
+        "Organisation-level operations act on whole accounts. Removing or "
+        "closing a member account, or deleting a service control policy, "
+        "changes the security boundary for everything inside it — and account "
+        "closure has a waiting period after which it is not reversible at all."
+    ),
+    "GCP-PROJECT": (
+        "Deleting a project schedules everything in it for deletion: every "
+        "resource, every dataset, every bucket, all at once. There is a "
+        "recovery window of about 30 days, which is the only reason this is "
+        "survivable, and restoring does not always bring back resources whose "
+        "names were released."
+    ),
+    "AZ-GROUP-DEL": (
+        "A resource group delete is a bulk delete of everything in it — VMs, "
+        "disks, databases, the lot — and it runs asynchronously once accepted. "
+        "Azure resource groups are frequently used as an environment "
+        "boundary, so the wrong name here is the wrong environment entirely."
+    ),
+
+    # --- databases ----------------------------------------------------------
+    "DB-DROP": (
+        "`DROP TABLE` removes the data and the schema together, and in most "
+        "engines it is not transactional in the way people assume — MySQL "
+        "commits implicitly around DDL, so a `BEGIN` before it protects "
+        "nothing. Recovery means the last backup plus whatever replay you "
+        "have, which turns a one-word mistake into a restore window."
+    ),
+    "DB-DROP-DB": (
+        "Dropping a database is every table at once, and the name in the "
+        "command is usually one character from the name of another "
+        "environment. Managed engines make this worse by putting production "
+        "and staging behind endpoints that differ only by a suffix."
+    ),
+    "DB-TRUNCATE": (
+        "`TRUNCATE` empties the table without producing per-row entries in the "
+        "binary log the way a DELETE does, and it cannot be rolled back on "
+        "MySQL. It is fast precisely because it skips the mechanisms that "
+        "would have let you undo it."
+    ),
+    "DB-DELETE-ALL": (
+        "A `DELETE` with no `WHERE` — or with a `WHERE` on a column that is "
+        "NULL for every row — removes the whole table's contents. Inside a "
+        "transaction it is recoverable; run through a client that autocommits, "
+        "it is not. The tell is a row count far larger than you expected, "
+        "reported after the fact."
+    ),
+    "DB-UPDATE-ALL": (
+        "An `UPDATE` without a `WHERE` rewrites every row, and unlike a delete "
+        "it leaves no obvious hole — the table still has the right number of "
+        "rows, all now wrong. It is often noticed days later, by which time "
+        "the backup that predates it has aged out."
+    ),
+    "DB-DROP-COLUMN": (
+        "Dropping a column discards its data immediately and, on a large "
+        "table, may rewrite the whole table under a lock. The deployment "
+        "incident is dropping a column that the currently running application "
+        "version still selects, which turns a schema change into an outage "
+        "until the rollback."
+    ),
+    "DB-FLUSH": (
+        "`FLUSHALL` and `FLUSHDB` empty Redis instantly. When Redis is a cache "
+        "this is a thundering herd against whatever it was caching; when it is "
+        "a session or queue store — which it often quietly is — it is data "
+        "loss. Persistence does not save you: the flush is written to the "
+        "AOF and RDB as well."
+    ),
+    "DB-MONGO-DROP": (
+        "`dropDatabase()` runs against whichever database the shell is "
+        "currently on, which is the one the last `use` selected and not "
+        "necessarily the one in your scrollback. There is no confirmation and "
+        "no undo."
+    ),
+    "MIGRATE-DOWN": (
+        "Migrating down to zero unwinds every migration, and 'down' migrations "
+        "are the least-tested code in most repositories — they are written "
+        "once, run never, and drop the tables the up migration created. "
+        "Rolling back a deployment rarely requires rolling back the schema."
+    ),
+    "MIGRATE-RESET": (
+        "A reset drops the database and rebuilds it from migrations. In "
+        "development that is the intended workflow, which is exactly why it "
+        "gets run against a `DATABASE_URL` inherited from a shell that was "
+        "pointed somewhere else."
+    ),
+    "MIGRATE-PRISMA": (
+        "`prisma migrate reset` drops and recreates the database from the "
+        "migration history, then re-seeds. It prompts interactively, so the "
+        "incident is the non-interactive form in a script or a CI job that "
+        "was pointed at a real database."
+    ),
+    "PG-RESET": (
+        "`pg_resetwal` is a last-resort recovery tool that discards the "
+        "write-ahead log. Running it on a cluster that could have been "
+        "recovered normally leaves the data files internally inconsistent in "
+        "ways that surface later as unreadable pages and wrong query results. "
+        "Take a filesystem-level copy of the data directory before, always."
+    ),
+
+    # --- cluster state and backups ------------------------------------------
+    "ETCDCTL-DEL": (
+        "A prefix delete against etcd removes keys the API server believes "
+        "exist. For a Kubernetes cluster, etcd *is* the state: objects vanish "
+        "without going through admission or finalizers, controllers act on the "
+        "resulting deletions, and the cluster is not so much broken as "
+        "confidently wrong."
+    ),
+    "ETCD-RESTORE": (
+        "Restoring a snapshot replaces cluster state wholesale. Every object "
+        "created since the snapshot disappears, and any member not restored "
+        "from the same snapshot will disagree — a partial restore across a "
+        "cluster is worse than no restore at all."
+    ),
+    "RESTIC-FORGET": (
+        "This deletes from the backup repository, which is the copy you keep "
+        "for when the primary is already gone. The incident is a retention "
+        "policy applied with the wrong tag or host filter, which silently "
+        "matches more snapshots than intended and prunes them in the same "
+        "command. `--dry-run` first; the output is the whole point."
+    ),
+    "RCLONE-SYNC": (
+        "`sync` makes the destination match the source, which means deleting "
+        "everything at the destination that is not at the source. Swap the two "
+        "arguments and you have replicated an empty or partial directory over "
+        "a full one. `copy` never deletes; use it unless removal is the goal."
+    ),
+    "RCLONE-PURGE": (
+        "`purge` removes the directory and its contents at the remote without "
+        "the per-object listing `delete` produces, so there is no output to "
+        "notice a wrong path in before it completes. On a bucket that is "
+        "someone's backup target, the first sign is the next restore."
+    ),
+    "S3CMD-RB": (
+        "Bucket and object removal against object storage, with the same "
+        "prefix-is-not-a-directory trap as the AWS CLI and no versioning "
+        "guarantee at all on non-AWS S3-compatible endpoints. Where AWS gives "
+        "you version history to recover from, a MinIO or Ceph gateway may give "
+        "you nothing, and the command line looks identical either way."
+    ),
+
+    # --- keys, certificates, cluster membership -----------------------------
+    "KEY-DELETE": (
+        "Deleting a private key or a keystore entry destroys the only thing "
+        "that can decrypt or sign. Everything encrypted to it becomes "
+        "permanently unreadable, and unlike a password there is no reset. GPG "
+        "secret keys and Java keystores are both routinely deleted while "
+        "'cleaning up' a machine that turned out to be the only place a key "
+        "existed."
+    ),
+    "CERT-REVOKE": (
+        "Revocation is published and cannot be taken back. Clients that check "
+        "OCSP or CRLs will refuse the certificate from then on, and issuing a "
+        "replacement takes as long as validation takes — which for a "
+        "DNS-01 challenge on a domain you do not directly control can be "
+        "hours. Revoke only for actual key compromise."
+    ),
+    "CLUSTER-RESET": (
+        "`kubeadm reset` and the k3s/k0s uninstall scripts tear the node's "
+        "cluster membership down and remove the local state, including etcd's "
+        "data directory on a control-plane node. On the last remaining "
+        "control-plane node this is the cluster, not the node."
+    ),
+    "CLUSTER-LEAVE": (
+        "Leaving a cluster removes this node from the quorum. Doing it to "
+        "enough members — sometimes just one, on a three-node cluster already "
+        "missing a member — costs quorum, and a cluster without quorum stops "
+        "accepting writes rather than degrading gracefully."
+    ),
+    "KAFKA-DELETE": (
+        "Deleting a topic deletes its log segments on every broker. Consumers "
+        "that had not caught up lose those messages permanently, and a "
+        "recreated topic with the same name starts at offset zero, which "
+        "confuses every consumer group that remembers a higher one."
+    ),
+    "MQ-RESET": (
+        "`rabbitmqctl reset` returns the node to its virgin state: every "
+        "queue, exchange, binding and message it held is discarded, and the "
+        "node forgets the cluster it was part of. It is the documented way out "
+        "of a split brain, which is why it gets copied out of a runbook and "
+        "run on the node that had the good data."
+    ),
+
+    # --- the enumerated CLIs ------------------------------------------------
+    "VAULT-KV-DELETE": (
+        "The verb lies, in the safe direction, which is why it has its own "
+        "rule. `kv delete` marks versions deleted and leaves them in storage; "
+        "`vault kv undelete -versions=N` brings them back. Scoring it as a "
+        "destroy would be the more dangerous error: people who learn that "
+        "Vault deletes are recoverable will treat `kv destroy` the same way."
+    ),
+    "VAULT-KV-DESTROY": (
+        "This is the permanent one. `destroy` removes the version's data and "
+        "`metadata delete` removes every version and the metadata with them. "
+        "Nothing in Vault brings either back, and the secret is typically the "
+        "only copy — that is the point of putting it there."
+    ),
+    "VAULT-SECRETS-DISABLE": (
+        "Disabling a mount deletes everything stored under it, not just the "
+        "route to it. The command reads like unmounting a filesystem and "
+        "behaves like formatting one. To move a mount, use `vault secrets "
+        "move`; to retire one, read what is under it first."
+    ),
+    "VAULT-AUDIT-DISABLE": (
+        "Vault stops recording who read which secret, and keeps serving "
+        "requests while it does — the gap is silent. Vault only refuses "
+        "requests when *every* audit device fails, so disabling the last one "
+        "does not fail closed, it just stops writing. Enable the replacement "
+        "before removing the incumbent."
+    ),
+    "VAULT-LEASE-REVOKE": (
+        "Revoking leases revokes the credentials behind them: the database "
+        "users and cloud keys Vault issued are dropped as it goes. With "
+        "`-prefix` that is every lease under a path, which on a busy mount is "
+        "every application currently holding a connection. `-force` is worse "
+        "in a different direction — it drops Vault's record without revoking "
+        "the credential, leaving it live and untracked."
+    ),
+    "VAULT-RAFT-RESTORE": (
+        "A snapshot restore replaces the whole of Vault's storage. Every "
+        "secret, policy, mount and token written since the snapshot was taken "
+        "is gone, and unlike most restores there is no partial or per-path "
+        "form. Take a fresh snapshot before restoring an old one."
+    ),
+    "VAULT-REKEY": (
+        "Rekeying invalidates the existing unseal shares the moment it "
+        "completes. Everyone holding an old share can no longer unseal, and if "
+        "the new shares are not distributed and stored before the next restart "
+        "the cluster cannot be brought back at all."
+    ),
+    "VELERO-BACKUP-DELETE": (
+        "Deleting a backup deletes the objects behind it in storage, so that "
+        "point in time stops being restorable. Nothing breaks today — the cost "
+        "is paid at the restore you have not needed yet, which is the hardest "
+        "kind of loss to notice in review."
+    ),
+    "VELERO-SCHEDULE": (
+        "Deleting or pausing a schedule stops backups being taken. There is no "
+        "immediate symptom at all: the cluster is fine, the last backup is "
+        "still there, and the gap only becomes visible when someone reads the "
+        "backup list during an incident."
+    ),
+    "VELERO-RESTORE-DELETE": (
+        "The verb lies. This deletes the restore *record*, not the objects the "
+        "restore created — those stay in the cluster, now with nothing "
+        "describing where they came from. People run it expecting to undo a "
+        "restore and get the opposite of clarity."
+    ),
+    "VELERO-UNINSTALL": (
+        "Removing Velero removes its CRDs, and with them the Backup and "
+        "Restore objects describing every backup you hold. The data may still "
+        "be in the bucket, but nothing in the cluster can enumerate or read it "
+        "until Velero is reinstalled and re-synced against the same location."
+    ),
+    "ARGOCD-APP-SYNC": (
+        "Sync applies whatever is in git to the cluster right now. It does not "
+        "care why HEAD moved, so an unreviewed commit, a merged branch or a "
+        "bumped chart version is deployed by the same command. With `--prune` "
+        "it also deletes cluster resources that are not in git — including "
+        "anything created outside Argo CD, which is usually the thing someone "
+        "added by hand during an incident."
+    ),
+    "ARGOCD-APP-DELETE": (
+        "Deleting an application cascades by default to the Kubernetes "
+        "resources it manages, so this is a workload delete wearing an Argo CD "
+        "command. `--cascade=false` removes only the Argo CD record and leaves "
+        "everything running, which is what people usually mean."
+    ),
+    "ARGOCD-CLUSTER-RM": (
+        "The verb lies. `cluster rm` de-registers a cluster from Argo CD and "
+        "does not touch the cluster itself. Nothing goes down — the "
+        "applications targeting it simply stop being reconciled, and drift "
+        "from git silently from that moment."
+    ),
+    "OS-PROJECT-DELETE": (
+        "The verb lies, expensively. Deleting a project does not delete the "
+        "servers, volumes and floating IPs inside it: they keep running and "
+        "keep billing, with no project left to manage them through. Purge the "
+        "resources first, then delete the project."
+    ),
+    "OS-PROJECT-PURGE": (
+        "The other half of the pair, and the one that actually deletes: every "
+        "resource the project owns — servers, volumes, images, networks — in "
+        "one call. `--dry-run` prints the list, and that list is routinely "
+        "longer than the person running it expects."
+    ),
+    "OS-VOLUME-DELETE": (
+        "The data on the volume goes with it, and `--force` deletes it while "
+        "an instance still has it attached — the guest sees I/O errors rather "
+        "than a clean unmount. A snapshot is the only way back and has to "
+        "exist beforehand."
+    ),
+    "OS-CATALOG-DELETE": (
+        "The service catalog is how every client finds the region's APIs. "
+        "Removing an endpoint or a service makes that service unreachable "
+        "region-wide without touching anything it manages, and the failure "
+        "looks like an outage in the service rather than a change to the "
+        "catalog."
+    ),
+    "FLY-VOLUME-DESTROY": (
+        "A Fly volume is a single local disk, not a replicated one. "
+        "Destroying it destroys the only copy of what was on it. Snapshots are "
+        "kept for about five days and are the only route back, so a volume "
+        "destroyed a week after the data mattered is simply gone."
+    ),
+    "FLY-SECRETS": (
+        "Setting a secret restarts every machine in the app — this is a "
+        "deploy, not a config write, and it happens the moment the command "
+        "returns. `--stage` stores the value without restarting and lets the "
+        "next deploy pick it up."
+    ),
+    "FLY-APPS-DESTROY": (
+        "Destroys the app with its machines and its volumes, and releases the "
+        "name for anyone else to claim. `fly scale count 0` stops it running "
+        "and billing without destroying anything, which is what 'turn this off "
+        "for now' usually means."
+    ),
+    "GH-REPO-DEL": (
+        "Deletes the repository with its issues, pull requests, releases and "
+        "wiki. GitHub's restore window is short and does not cover everything, "
+        "and the name becomes claimable — which for a public repository means "
+        "someone else can publish under a path other people's tooling still "
+        "fetches. `gh repo archive` is read-only and reversible."
+    ),
+    "GH-API-DELETE": (
+        "`gh api` is the raw REST API, so the verb that matters is in `-X` and "
+        "not in the subcommand — nothing else on the command line says what "
+        "this changes. `gh api -X DELETE /repos/{owner}/{repo}` deletes a "
+        "repository, and verb classification reads it as a harmless `api` "
+        "call. This is the shape to watch for in scripts."
+    ),
+    "GH-PR-MERGE": (
+        "On a repository that deploys on merge, this is the deploy. `--admin` "
+        "makes it worse by merging past branch protection — required reviews "
+        "and status checks are bypassed, which is the control the repository "
+        "configured on purpose. `--auto` queues behind the checks instead."
+    ),
+    "GH-RELEASE-DELETE": (
+        "Deletes the release and every asset attached to it. Anything pinned "
+        "to those download URLs breaks — including other people's CI, which is "
+        "the part you do not find out about. `--cleanup-tag` additionally "
+        "removes the tag, so the commit is no longer named."
+    ),
+    "VIRSH-DESTROY": (
+        "The verb lies, in the safe direction. `virsh destroy` force-powers-off "
+        "a domain — the equivalent of pulling the plug — and does not delete "
+        "it. The disk survives and the domain can be started again; the cost "
+        "is an unclean shutdown, not a loss."
+    ),
+    "VIRSH-UNDEFINE": (
+        "This is the one that deletes. It removes the domain definition, and "
+        "with `--remove-all-storage` the disk images too. A domain that is "
+        "undefined while running keeps running until it stops, and then cannot "
+        "be started again."
+    ),
+    "HEROKU-DESTROY": (
+        "`apps:destroy` and `pg:reset` remove the application or empty the "
+        "database, add-on data included. Both prompt for the app name, which "
+        "is the only guard, and both are frequently run against the app whose "
+        "name differs from the intended one by a `-staging` suffix."
+    ),
+    "EKSCTL-DEL": (
+        "Deleting a cluster deletes the CloudFormation stacks behind it, which "
+        "is more than the control plane: node groups, their instances, and any "
+        "resources the stack owns. Persistent volumes provisioned through the "
+        "cluster may be deleted with it depending on their reclaim policy."
+    ),
+    "PULUMI-DESTROY": (
+        "Tears down every resource in the stack, with the same wrong-stack "
+        "risk Terraform has and the same absence of a per-resource "
+        "confirmation. `pulumi stack rm` additionally discards the state, "
+        "which orphans anything the state described."
+    ),
+    "CEPH-DEL": (
+        "Pool deletion in Ceph removes every object in the pool, and Ceph "
+        "requires two confirmation flags precisely because there is no way "
+        "back. `osd destroy` removes an OSD's identity and, with enough of "
+        "them, the redundancy that was keeping the data available."
+    ),
+    "CM-ANSIBLE": (
+        "The blast radius is the inventory pattern, not the playbook. A play "
+        "that is fine on one host is the same play on four hundred, executed "
+        "in parallel, and the mistake is usually a pattern that matched more "
+        "than intended — `all` inherited from a group_vars default, or a "
+        "wildcard that also matched production. `--check --diff` first, then "
+        "`--limit` one host, then the fleet."
+    ),
+
+    # --- amplifiers ---------------------------------------------------------
+    "FORCE": (
+        "`--force` exists to get past a check. Every check it disables was put "
+        "there by someone who had seen what happens without it, so the flag "
+        "converts a refusal you could have read into an action you cannot "
+        "undo. In an incident it is the flag people reach for after the third "
+        "failure, which is exactly when they are least able to reason about "
+        "what the check was for."
+    ),
+    "ASSUME-YES": (
+        "Auto-confirmation removes the last human checkpoint. The prompt it "
+        "suppresses is usually the one that would have printed the list — the "
+        "packages about to be removed, the objects about to be deleted — so "
+        "the flag does not just skip the question, it hides the answer. In CI "
+        "it is unavoidable; in a shell it is a habit worth noticing."
+    ),
+    "SECRET-IN-ARGV": (
+        "A credential on the command line is visible to every user on the host "
+        "through `ps`, lands in shell history, and is captured verbatim by any "
+        "process supervisor or CI log collector. It leaks without anything "
+        "going wrong. Pass it by environment file, on stdin, or through a "
+        "credential helper — and treat one that has been in argv as already "
+        "disclosed."
+    ),
+    "OPEN-TO-WORLD": (
+        "`0.0.0.0/0` is the entire internet, not 'anywhere in our network'. "
+        "Ports opened this way are found by scanners within minutes, and the "
+        "rule is usually added to unblock a connectivity problem whose real "
+        "cause was something else. Name a CIDR you control."
+    ),
+    "NO-TLS-VERIFY": (
+        "Disabling certificate verification makes a machine-in-the-middle "
+        "indistinguishable from the real endpoint. It is almost always added "
+        "to work around an expired or internal CA, and it then stays in the "
+        "script long after the certificate is fixed — silently accepting any "
+        "certificate for every later run."
+    ),
+    "REMOTE-EXEC-SUBST": (
+        "Fetching a script inside a substitution runs unreviewed remote code "
+        "with your privileges, and hides the fetch as its own step: there is "
+        "no file on disk to read afterwards and nothing in the command line "
+        "that looks like a download. The server can serve different content to "
+        "a browser than to the shell, so 'I read it in my browser first' is "
+        "not the check it feels like."
+    ),
+    "HISTFILE": (
+        "Disabling shell history stops the audit trail at exactly the point "
+        "someone would later want to read it. There are legitimate reasons — a "
+        "secret typed by hand — but it is also the first line of a session "
+        "nobody can reconstruct."
+    ),
+    "PROD-HINT": (
+        "The target names a production environment. This is a weak signal by "
+        "design: it is a string match, not knowledge. It exists because the "
+        "single most common ingredient in a serious incident is a command that "
+        "was correct for one environment run against another."
+    ),
+    "K8S-ALL": (
+        "`--all` and `--all-namespaces` widen the selector to everything the "
+        "credential can see, which on an admin kubeconfig is the cluster. The "
+        "flag is often added to make a command that returned nothing return "
+        "something — and the reason it returned nothing was usually a wrong "
+        "namespace, not too narrow a selector."
+    ),
+    "RECURSIVE": (
+        "Recursion turns one target into a subtree. The mistake is rarely the "
+        "flag; it is the flag combined with a path that resolved differently "
+        "than expected — a trailing slash, an unset variable, a symlink into "
+        "somewhere much larger."
+    ),
+    "NO-PRESERVE-ROOT": (
+        "`--no-preserve-root` disables the one guard `rm` has against deleting "
+        "`/`. There is no legitimate interactive use: the guard exists because "
+        "this has happened, repeatedly, to people who knew better."
+    ),
+    "PRIVILEGED": (
+        "`--privileged` drops container isolation. The container can access "
+        "host devices, load kernel modules and, through `/proc` and the "
+        "cgroup filesystem, reach the host itself — this is host-level access "
+        "wearing a container's name. It is usually added to make a mount or a "
+        "device work, where a specific capability would have done."
+    ),
+    "HOST-MOUNT": (
+        "Bind-mounting a host path into a container makes container writes "
+        "host writes, with the container's user mapping rather than yours. "
+        "Mounting `/` or `/var/run/docker.sock` is a full escape: the "
+        "container can rewrite the host filesystem or start further "
+        "containers with any options it likes."
+    ),
+}
+
+
+def entry_by_id(rid):
+    """Find a rule or amplifier by id. Returns (kind, entry) or (None, None).
+
+    Amplifier ids are printed with a leading `+` by --list-rules, so both
+    spellings resolve — a reader copying an id out of that output should not
+    have to know which half of the table it came from.
+    """
+    rid = rid.strip().lstrip("+").upper()
+    for r in RULES:
+        if r["id"] == rid:
+            return "rule", r
+    for a in AMPS + SOFTENERS:
+        if a["id"] == rid:
+            return "amp", a
+    return None, None
+
+
+def rule_ids():
+    """Every id `--why` will answer to."""
+    return sorted({r["id"] for r in RULES} | {a["id"] for a in AMPS + SOFTENERS})
+
+
+def _wrap(text, indent="  ", width=78, hang=""):
+    return textwrap.fill(text, width=width, initial_indent=indent,
+                         subsequent_indent=indent + hang)
+
+
+def _reachable(entry, kind):
+    """The amplifiers and softeners that can apply to this rule's binaries.
+
+    Answers "why this band" with the range the rule can actually reach rather
+    than with its base alone: a rule at 55 whose binaries carry a +35 amplifier
+    is a `critical` waiting for one flag, and that is the part a reader
+    disagreeing with a score needs to see.
+    """
+    if kind != "rule":
+        return [], []
+    bins, subsumed = entry["bins"], entry["subsumes"]
+    # Only the ones named for these binaries. The generic signals apply to
+    # every command and listing them under each rule would bury the two or
+    # three that are actually about this one.
+    amps = [a for a in AMPS
+            if a["bins"] and a["bins"] & bins and a["id"] not in subsumed]
+    softs = [a for a in SOFTENERS
+             if a["bins"] and a["bins"] & bins and a["id"] not in subsumed]
+    return amps, softs
+
+
+def _related(entry):
+    """Other rules on the same binaries, and the generic ones this beats."""
+    same, beats = [], []
+    for r in RULES:
+        if r["id"] == entry["id"] or not (r["bins"] & entry["bins"]):
+            continue
+        (beats if r["generic"] and not entry["generic"] else same).append(r)
+    return same, beats
+
+
+def _why_head(kind, entry, width):
+    """The identity line: what this is, and the three facts a score reports."""
+    if kind == "rule":
+        head = (f"{entry['id']}  ·  base {entry['base']} ({band(entry['base'])})  ·  "
+                f"scope: {entry['scope']}  ·  {entry['revert']}")
+    else:
+        sign = "softener" if entry["points"] < 0 else "amplifier"
+        head = f"+{entry['id']}  ·  {entry['points']:+d} ({sign})"
+        if entry["scope"] or entry["revert"]:
+            head += (f"  ·  scope: {entry['scope'] or '—'}  ·  "
+                     f"{entry['revert'] or '—'}")
+    return [head, "=" * min(len(head), width), ""]
+
+
+def _why_matches(kind, entry):
+    """What it matches, and — as importantly — what it does not."""
+    out = ["MATCHES"]
+    out.append(_wrap(", ".join(sorted(entry["bins"])) if entry["bins"] else "any command"))
+    pattern = entry["sub"] if kind == "rule" else entry["pattern"]
+    if pattern is not None:
+        # Printed unwrapped: a regex broken across lines is not something you
+        # can paste back into anything.
+        out += ["  …when the arguments match:", f"    {pattern.pattern}"]
+    elif kind == "rule":
+        out.append(_wrap("…whatever the arguments are — the binary is the whole of it."))
+    if kind == "rule" and entry["generic"]:
+        out.append(_wrap("This is a verb classifier: a floor for CLIs nobody has "
+                         "enumerated, and any specific rule beats it — including one "
+                         "that scores lower."))
+    elif kind == "rule":
+        out.append(_wrap("Not matched: anything a rule with a higher base claims first. "
+                         "Specificity wins before score does."))
+    return out + [""]
+
+
+def _why_incident(entry):
+    """The prose half, or an honest admission that it has not been written."""
+    out = ["INCIDENT CLASS"]
+    note = INCIDENTS.get(entry["id"])
+    if note:
+        return out + [_wrap(note), ""]
+    out.append(_wrap(f"Not written yet. The one-line reason is: {entry['why']}"))
+    out.append(_wrap("Everything above and below is derived from the rule table, so it is "
+                     "accurate — but the class of incident this rule exists to prevent has "
+                     "not been written down. That is a gap, not a judgement that the rule "
+                     "is uninteresting."))
+    return out + [""]
+
+
+def _why_band(entry, kind):
+    """Why this band, and what the flags on these binaries can do to it."""
+    out = ["WHY THIS BAND",
+           _wrap(f"{entry['base']}/100 on its own, which is `{band(entry['base'])}`. "
+                 f"Blast radius `{entry['scope']}`; getting back is `{entry['revert']}`.")]
+    amps, softs = _reachable(entry, kind)
+    if amps:
+        worst = max(amps, key=lambda x: x["points"])
+        reached = min(100, entry["base"] + worst["points"])
+        out.append("")
+        out.append(_wrap(f"Amplifiers registered for these binaries — each applies only "
+                         f"where its own pattern matches. The largest is "
+                         f"{worst['points']:+d} ({worst['id']}); where it applies, "
+                         f"{entry['base']} becomes {reached}/`{band(reached)}`."))
+        out += _why_modifiers(sorted(amps, key=lambda x: -x["points"])[:8])
+    if softs:
+        out.append("")
+        out.append(_wrap("Asking for it carefully scores below asking for it carelessly:"))
+        out += _why_modifiers(sorted(softs, key=lambda x: x["points"])[:6])
+    out.append("")
+    out.append(_wrap("The generic signals — `--force`, `-y`, `--purge`, a credential in "
+                     "argv, disabled TLS or signature verification, `0.0.0.0/0`, a target "
+                     "that names production — apply on top of any command. "
+                     "`--list-rules` prints them."))
+    return out + [""]
+
+
+def _why_modifiers(entries):
+    return [_wrap(f"{a['points']:+d}  {a['id']}: {a['why']}", indent="    ", hang="     ")
+            for a in entries]
+
+
+def _why_safer(entry):
+    """The alternative, or a note that the rule owes one."""
+    if entry["advice"]:
+        body = entry["advice"]
+    elif entry["base"] >= 35:
+        body = ("No alternative recorded. For a rule at this level that is a gap in the "
+                "rule, not a statement that none exists.")
+    else:
+        body = "Nothing to avoid — this is not a destructive rule."
+    return ["SAFER", _wrap(body), ""]
+
+
+def _why_related(entry):
+    """Neighbours on the same binaries, and the classifiers this one beats."""
+    same, beats = _related(entry)
+    if not (same or beats):
+        return []
+    out = ["RELATED"]
+    out += [_wrap(f"{r['id']} ({r['base']}) — {r['why']}", indent="    ", hang="  ")
+            for r in sorted(same, key=lambda x: -x["base"])[:8]]
+    out += [_wrap(f"beats {r['id']} ({r['base']}), the verb classifier", indent="    ")
+            for r in beats]
+    return out + [""]
+
+
+def why_text(rid, width=78):
+    """The long form for one rule or amplifier, or None if the id is unknown.
+
+    Assembled from the rule table rather than written out twice: the band, the
+    scope, the reversibility and the reachable range are all facts the scorer
+    already uses, so this view cannot disagree with the score it explains. Only
+    the incident-class paragraph is prose, and it is optional — a rule without
+    one says so rather than padding.
+
+    One section per helper, in printed order, so a section can be read or
+    changed without the whole view in your head.
+    """
+    kind, entry = entry_by_id(rid)
+    if not entry:
+        return None
+    out = _why_head(kind, entry, width) + _why_matches(kind, entry) + _why_incident(entry)
+    if kind == "rule":
+        out += _why_band(entry, kind) + _why_safer(entry) + _why_related(entry)
+    out.append(f"  scoville --list-rules   ·   {len(INCIDENTS)} of {len(rule_ids())} ids "
+               "have an incident note")
+    return "\n".join(out).rstrip() + "\n"
+
 
 # --------------------------------------------------------------- parsing ---
 
@@ -1298,9 +2669,282 @@ VAR_PATH = re.compile(r"^\$\{?(\w+)\}?(/.*)?$")
 
 # Factor prefixes that stay visible even at zero points: "the payload is safe"
 # is exactly what someone running `docker exec` wants confirmed.
+# ---------------------------------------------- definitions in this text ---
+#
+# A wrapper script, a make target, an npm script and an image ENTRYPOINT are all
+# already treated as carriers: the call site is opaque and `--introspect`
+# resolves it. Shell functions and aliases are the same problem one level
+# closer, and in a deploy script that defines its own helpers they are most of
+# the interesting lines.
+
+ALIAS_DEF = re.compile(
+    r"(?:^|[;&|]\s*)\s*alias\s+(?P<name>[\w.-]+)="
+    r"(?P<val>'[^']*'|\"[^\"]*\"|\S+)", re.MULTILINE)
+# `name() {` and `function name {`, the two spellings bash accepts.
+FUNC_HEAD = re.compile(
+    r"(?:^|[;&|]\s*)\s*(?:function\s+)?(?P<name>[\w.-]+)\s*\(\s*\)\s*\{", re.MULTILINE)
+FUNC_HEAD_KW = re.compile(
+    r"(?:^|[;&|]\s*)\s*function\s+(?P<name>[\w.-]+)\s*\{", re.MULTILINE)
+
+CARRIER_ALIAS = "resolved alias "
+CARRIER_FUNCTION = "resolved function "
+
+
+def _balanced_body(text, brace_at):
+    """Text between the `{` at `brace_at` and its matching `}`, or None.
+
+    Brace counting, not a regex: a function body containing `${VAR}` or a
+    nested `if ... { }` is ordinary, and a non-greedy match to the first `}`
+    would truncate the body and quietly under-report what it runs.
+    """
+    depth = 0
+    for i in range(brace_at, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace_at + 1:i]
+    return None
+
+
+def collect_definitions(text):
+    """Functions and aliases defined in `text`, each with the offset it goes live.
+
+    Nothing outside `text` is read. Resolving the user's `~/.bashrc` would make
+    the same script score differently on two machines, which is a worse answer
+    than an unknown command — the score has to be a property of the input.
+    """
+    defs = []
+    for m in ALIAS_DEF.finditer(text):
+        val = m.group("val")
+        if val[:1] in "'\"":
+            val = val[1:-1]
+        defs.append({"kind": "alias", "name": m.group("name"), "value": val,
+                     "at": m.end(), "line": text.count("\n", 0, m.start()) + 1})
+    for pattern in (FUNC_HEAD, FUNC_HEAD_KW):
+        for m in pattern.finditer(text):
+            brace = m.end() - 1
+            body = _balanced_body(text, brace)
+            if body is None:
+                continue  # unterminated; scoring half a body is worse than skipping it
+            defs.append({"kind": "function", "name": m.group("name"), "value": body,
+                         # Live only after the closing brace: bash reads the
+                         # whole definition before the name means anything.
+                         "at": brace + len(body) + 2,
+                         "line": text.count("\n", 0, m.start()) + 1})
+    defs.sort(key=lambda d: d["at"])
+    return defs
+
+
+def definition_at(defs, name, offset):
+    """The definition of `name` in scope at `offset`, or None.
+
+    The last definition before the call site wins — that is what redefinition
+    means, and an alias shadowing a real binary is exactly the case worth
+    catching. A definition *after* the call site is not applied: bash reads top
+    to bottom, and scoring it anyway would be a false positive on the common
+    layout of helpers at the bottom of a script.
+    """
+    found = None
+    for d in defs:
+        if d["name"] == name and d["at"] <= offset:
+            found = d
+    return found
+
+
 PAYLOAD = "payload "
 ENTRYPOINT = "resolved entrypoint "
 WRAPPER = "resolved wrapper "
+RBAC = "rbac "
+
+# ------------------------------------------------------ kubernetes RBAC ---
+#
+# `kubectl delete ns prod` scores the same whether the current context is
+# cluster-admin on production or a read-only token that will be refused. The
+# second case is noise, and noise is what makes people stop reading the output.
+# scoville knows the command; it does not know the authorisation.
+#
+# `kubectl auth can-i` is a SelfSubjectAccessReview — a read that asks the API
+# server "would you allow this?" and changes nothing. That keeps the "nothing
+# is ever executed to score it" contract intact, but it is still a call to a
+# live cluster, so it lives behind --introspect with everything else that
+# leaves the machine.
+#
+# THE DIRECTION OF FAILURE IS THE WHOLE DESIGN. A dampener that fires on a bad
+# `can-i` result under-reports risk, which is the one kind of wrong answer this
+# tool must not give. So: nothing is dampened unless a refusal is POSITIVELY
+# established. A timeout, a missing kubeconfig, an unreachable cluster and an
+# answer this code cannot parse all mean "no opinion", and no opinion scores
+# exactly as it does today.
+
+KUBE_BINS = ("kubectl", "oc", "k")
+
+# Timeout for one `can-i`. Bounded because this runs once per kubectl line, and
+# a script full of them must not turn a score into a network wait.
+KUBE_TIMEOUT_DEFAULT = 3.0
+
+# Verbs whose kubectl spelling differs from the RBAC verb. Everything else is
+# passed through, because the RBAC verb list is open — a CRD can define its own.
+KUBE_VERB_ALIASES = {
+    "apply": "patch", "edit": "patch", "set": "patch", "annotate": "patch",
+    "label": "patch", "scale": "patch", "rollout": "patch", "autoscale": "patch",
+    "run": "create", "expose": "create", "cordon": "patch", "drain": "patch",
+    "uncordon": "patch", "taint": "patch", "exec": "create",
+    "port-forward": "create", "cp": "create", "attach": "create",
+    "describe": "get", "logs": "get", "top": "get", "wait": "get",
+}
+
+# kubectl's own short forms for the resources most worth knowing about. Not a
+# complete table and not meant to be: an unrecognised resource is passed to
+# `can-i` verbatim, which is the component that actually knows the API surface.
+KUBE_RESOURCE_ALIASES = {
+    "ns": "namespaces", "po": "pods", "deploy": "deployments", "svc": "services",
+    "cm": "configmaps", "sts": "statefulsets", "ds": "daemonsets", "rs": "replicasets",
+    "pv": "persistentvolumes", "pvc": "persistentvolumeclaims", "sa": "serviceaccounts",
+    "no": "nodes", "ing": "ingresses", "crd": "customresourcedefinitions",
+    "secret": "secrets", "job": "jobs", "cj": "cronjobs",
+}
+
+# Flags that take a separate value, so the token after them is not a verb or a
+# resource. `-n prod` is the one that matters; the rest are here so a long
+# command line does not shift the parse by one.
+KUBE_VALUE_FLAGS = {
+    "-n", "--namespace", "--context", "--cluster", "--user", "--kubeconfig",
+    "-f", "--filename", "-l", "--selector", "-o", "--output", "--server",
+    "--token", "--as", "--as-group", "-c", "--container", "--field-selector",
+}
+
+
+def _kubectl(binary, args, timeout):
+    """Run one read-only kubectl subcommand and return stdout, or None.
+
+    Same collapse as _docker: a missing binary, a timeout, a non-zero exit and
+    an OS error are all "no answer" to the caller, and no answer must never
+    become a dampener.
+    """
+    exe = shutil.which(binary)
+    if not exe:
+        return None
+    try:
+        r = subprocess.run([exe, *args], capture_output=True, text=True,
+                           timeout=timeout, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    # `can-i` exits 1 for "no" and prints "no", so stdout is read on both exit
+    # codes and the caller reads the word, not the status.
+    return (r.stdout or "").strip()
+
+
+def kube_target(args):
+    """(verb, resource, namespace) for a kubectl command line, or (None, ...).
+
+    Positional-only: the first two non-flag tokens. Enough for the commands
+    worth scoring, and it declines rather than guesses on anything else.
+    """
+    verb = resource = namespace = None
+    positional = []
+    skip = False
+    for i, a in enumerate(args):
+        if skip:
+            if namespace is None and args[i - 1] in ("-n", "--namespace"):
+                namespace = a
+            skip = False
+            continue
+        if a == "--":
+            break
+        if a.startswith("--") and "=" in a:
+            k, v = a.split("=", 1)
+            if k in ("-n", "--namespace"):
+                namespace = v
+            continue
+        if a in KUBE_VALUE_FLAGS:
+            skip = True
+            continue
+        if a.startswith("-"):
+            continue
+        positional.append(a)
+    if positional:
+        verb = positional[0]
+    if len(positional) > 1:
+        # `delete pod/foo` and `delete pods foo` both mean pods.
+        resource = positional[1].split("/", 1)[0]
+    return verb, resource, namespace
+
+
+def kube_context(binary, timeout):
+    """The context name `can-i` will be answered by, or None.
+
+    A local kubeconfig read, not a cluster call — but if there is no context
+    there is nothing to ask, which is the cheapest way to skip the network.
+    """
+    out = _kubectl(binary, ["config", "current-context"], timeout)
+    return out or None
+
+
+def kube_can_i(binary, verb, resource, namespace, timeout):
+    """True / False / None for "may this context do that".
+
+    None is not a third state to act on — it is the absence of an answer, and
+    every caller treats it as "score exactly as before".
+    """
+    cmd = ["auth", "can-i", verb, resource]
+    if namespace:
+        cmd += ["-n", namespace]
+    out = _kubectl(binary, cmd, timeout)
+    if out is None:
+        return None
+    first = out.splitlines()[0].strip().lower() if out else ""
+    if first.startswith("yes"):
+        return True
+    if first.startswith("no"):
+        return False
+    return None
+
+
+def kube_rbac_factors(binary, args, timeout=KUBE_TIMEOUT_DEFAULT):
+    """Fold the cluster's own answer in as scoring factors.
+
+    Returns a list of factor tuples. Empty means "nothing to say", which is
+    also what every failure returns.
+    """
+    verb, resource, ns = kube_target(args)
+    if not verb or not resource:
+        return []
+    ctx = kube_context(binary, timeout)
+    if not ctx:
+        return []
+    rbac_verb = KUBE_VERB_ALIASES.get(verb, verb)
+    rbac_res = KUBE_RESOURCE_ALIASES.get(resource, resource)
+    where = f" in {ns}" if ns else ""
+
+    allowed = kube_can_i(binary, rbac_verb, rbac_res, ns, timeout)
+    if allowed is False:
+        # The one dampener. Deliberately points rather than a cap: the context
+        # is read NOW and the command may run later against a different one,
+        # which is why the factor names the context it asked.
+        return [(-30, (f"{RBAC}context `{ctx}` cannot {rbac_verb} {rbac_res}{where} — "
+                       f"`kubectl auth can-i` says no, so this would be refused as it "
+                       f"stands. Scored down, not to zero: the context is read now and "
+                       f"the command may run later against another one"),
+                 None, None, "RBAC-REFUSED")]
+    if allowed is None:
+        return [(0, (f"{RBAC}no answer from `kubectl auth can-i {rbac_verb} {rbac_res}"
+                     f"{where}` (context `{ctx}`) — scored as if it had not been asked"),
+                 None, None, "RBAC-UNKNOWN")]
+
+    # Permitted. Worth a factor only where it changes the reading: being able to
+    # do everything, everywhere, is the difference between "this deletes a
+    # namespace" and "this deletes a namespace and nothing will stop it".
+    admin = kube_can_i(binary, "*", "*", None, timeout)
+    if admin is True:
+        return [(10, (f"{RBAC}context `{ctx}` is cluster-admin (`can-i '*' '*'` says yes): "
+                      f"nothing in the cluster refuses this, and there is no RBAC boundary "
+                      f"left to catch a mistake"),
+                 "cluster", None, "RBAC-CLUSTER-ADMIN")]
+    return [(0, (f"{RBAC}context `{ctx}` may {rbac_verb} {rbac_res}{where} — "
+                 f"`kubectl auth can-i` says yes"), None, None, "RBAC-PERMITTED")]
+
 
 
 def path_factors(binary, args):
@@ -1350,6 +2994,22 @@ def path_factors(binary, args):
     return out
 
 
+def specific_clis():
+    """The resource CLIs enumerated per resource rather than by verb.
+
+    Derived from the rule set rather than listed, because docs/rules.md names
+    which CLIs are enumerated and which are carried by verb classification, and
+    a hand-maintained list drifts the first time a rule is added.
+    """
+    enumerated = {b for r in RULES if not r["generic"] for b in r["bins"]}
+    return sorted(set(RESOURCE_CLIS.split()) & enumerated)
+
+
+def generic_clis():
+    """The resource CLIs verb classification still carries on its own."""
+    return sorted(set(RESOURCE_CLIS.split()) - set(specific_clis()))
+
+
 def pick_rule(binary, args_str):
     """Pick the rule that best describes a command, or None.
 
@@ -1365,7 +3025,101 @@ def pick_rule(binary, args_str):
     return max(candidates, key=lambda r: (not r["generic"], r["sub"] is not None, r["base"]))
 
 
-def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=".", seen=None):
+def _score_local_definition(local, raw, binary, args, privileged, strict, introspect,
+                            depth, basedir, seen, defs, offset):
+    """Score a call to a function or alias defined earlier in the same input.
+
+    An alias is *expanded* — `k delete ns prod` is `kubectl delete ns prod`, and
+    scoring it as anything softer would miss the shadowing that makes aliases
+    worth resolving at all. A function gets carrier treatment, like a wrapper
+    script: the call site contributes the frame, the body contributes the score.
+    """
+    seen = seen if seen is not None else set()
+    key = f"{local['kind']}:{local['name']}@{local['at']}"
+    site = f"defined on line {local['line']} of this input"
+
+    if key in seen:
+        # Mutual recursion arrives here too: b is on the stack when a calls it
+        # back. Stopping is the whole answer; the body has already been scored
+        # once further up, and its score is already carried.
+        return {
+            "command": raw.strip(), "rule": "CARRIER-RECURSION", "known": True, "score": 0,
+            "level": "safe", "scope": "none", "reversibility": "reversible",
+            "privileged": privileged, "advice": None, "carries": [],
+            "factors": [{"points": 0, "why": f"`{binary}` is already being scored higher up "
+                                             f"this call chain — recursion stops here",
+                         "keep": True}],
+        }
+
+    if local["kind"] == "alias":
+        expanded = " ".join([local["value"], *args]).strip()
+        seen.add(key)
+        try:
+            # Resolved at the *call* site, not the definition: bash looks a name
+            # up when the line runs, so a helper defined below another one is
+            # still in scope by the time either is called.
+            child = score_command(expanded, tokenize(expanded), strict=strict,
+                                  introspect=introspect, depth=depth + 1, basedir=basedir,
+                                  seen=seen, defs=defs, offset=offset)
+        finally:
+            seen.discard(key)
+        if not child:
+            return None
+        result = dict(child)
+        result["command"] = raw.strip()
+        result["privileged"] = privileged or child["privileged"]
+        result["factors"] = [{"points": 0,
+                              "why": (f"{CARRIER_ALIAS}`{binary}` is `{local['value']}`, {site} "
+                                      f"— scored as `{child['command']}`"),
+                              "rule": None, "keep": True}] + list(child["factors"])
+        return result
+
+    factors = [{"points": 0, "why": f"`{binary}` is a function {site}",
+                "rule": None, "keep": True}]
+    scope, revert, advice, children = "none", "reversible", None, []
+    seen.add(key)
+    try:
+        inner = analyze(local["value"], strict=strict, introspect=introspect, basedir=basedir,
+                        _depth=depth + 1, _seen=seen, _defs=defs, _at=offset)
+    finally:
+        # Discarded, not left behind: calling the same helper twice in one
+        # script is ordinary, and a visited-set would report the second call as
+        # recursion and score it zero.
+        seen.discard(key)
+    worst = max(inner, key=lambda r: r["score"], default=None)
+    if worst and worst["score"]:
+        children.append(worst)
+        factors.append({"points": worst["score"],
+                        "why": (f"{CARRIER_FUNCTION}`{binary}()` runs `{worst['command']}`, "
+                                f"which is {worst['level']}"),
+                        "rule": None, "keep": True})
+        scope, revert, advice = worst["scope"], worst["reversibility"], worst["advice"]
+    score = max(0, min(100, sum(f["points"] for f in factors)))
+    return {
+        "command": raw.strip(), "rule": "CARRIER-FUNCTION", "known": True, "score": score,
+        "level": band(score), "scope": scope, "reversibility": revert,
+        "privileged": privileged, "advice": advice, "factors": factors, "carries": children,
+    }
+
+
+def _factor(f):
+    """One contributing factor, as it appears in output.
+
+    `rule` names the rule or amplifier that produced it, so `scoville --why
+    <id>` reaches the reasoning from any line of a report rather than from a
+    search through the source. Factors that are not a rule — a path, a carried
+    payload, a dampener — carry None rather than a made-up id.
+    """
+    points, why = f[0], f[1]
+    return {
+        "points": points, "why": why,
+        "rule": f[4] if len(f) > 4 else None,
+        "keep": why.startswith((PAYLOAD, ENTRYPOINT, WRAPPER)),
+    }
+
+
+def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=".",
+                  seen=None, defs=None, offset=0, kube_timeout=KUBE_TIMEOUT_DEFAULT):
     """Score one command. Returns a result dict; recurses into payloads."""
     rest, privileged, wrappers = strip_prefix(tokens)
     if not rest:
@@ -1382,14 +3136,25 @@ def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=
                                              "own lines", "keep": False}],
         }
 
+    # A name defined earlier in this same text shadows whatever is on PATH.
+    # Only under --introspect: resolving a carrier is what that flag means, and
+    # the default path must keep scoring exactly what it is shown.
+    local = definition_at(defs, binary, offset) if (introspect and defs) else None
+    if local and depth < 3:
+        resolved = _score_local_definition(
+            local, raw, binary, args, privileged, strict, introspect, depth, basedir, seen,
+            defs, offset)
+        if resolved:
+            return resolved
+
     rule = pick_rule(binary, args_str)
     factors = []
     if rule:
         scope, revert, advice = rule["scope"], rule["revert"], rule["advice"]
         if rule["base"]:
-            factors.append((rule["base"], rule["why"], None, None))
+            factors.append((rule["base"], rule["why"], None, None, rule["id"]))
         elif rule["base"] == 0:
-            factors.append((0, rule["why"], None, None))
+            factors.append((0, rule["why"], None, None, rule["id"]))
         base_id = rule["id"]
     else:
         scope, revert, advice = "none", "reversible", None
@@ -1398,7 +3163,7 @@ def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=
         unknown_why = f"no rule for `{binary}` — scored on flags and targets only"
         if strict:
             unknown_why += " (--strict: unknown means unreviewed)"
-        factors.append((pts, unknown_why, None, None))
+        factors.append((pts, unknown_why, None, None, "UNKNOWN"))
         verb = UNKNOWN_DESTROY.search(args_str)
         if verb:
             factors.append((40, (f"`{verb.group(1)}` is destructive in nearly every CLI, and "
@@ -1413,7 +3178,7 @@ def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=
             continue  # the rule exists because of this flag; do not count it twice
         hay = args_str if not amp.get("raw") else raw
         if amp["pattern"].search(hay) or (amp["bins"] is None and amp["pattern"].search(raw)):
-            factors.append((amp["points"], amp["why"], amp["scope"], amp["revert"]))
+            factors.append((amp["points"], amp["why"], amp["scope"], amp["revert"], amp["id"]))
 
     if binary in PATH_SENSITIVE or (rule and rule["paths"]):
         factors.extend(path_factors(binary, args))
@@ -1489,6 +3254,11 @@ def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=
                     else ", and it could not be read from here")
             factors.append((20, why, None, None))
 
+    # What the cluster itself says. Only under --introspect, and only for a
+    # kubectl line: everything here is a call to a live API server.
+    if introspect and binary in KUBE_BINS:
+        factors.extend(kube_rbac_factors(binary, args, kube_timeout))
+
     # dampeners
     dry = None
     for pattern, why in DAMPENERS:
@@ -1500,7 +3270,8 @@ def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=
             dry = why
 
     score = max(0, min(100, sum(p for p, *_ in factors)))
-    for _, _, s, r in factors:
+    for f in factors:
+        s, r = f[2], f[3]
         if s:
             scope = widest(scope, s)
         if r:
@@ -1514,8 +3285,7 @@ def score_command(raw, tokens, strict=False, introspect=False, depth=0, basedir=
         "command": raw.strip(), "rule": base_id, "known": rule is not None,
         "score": score, "level": band(score), "scope": scope, "reversibility": revert,
         "privileged": privileged, "advice": advice,
-        "factors": [{"points": p, "why": w, "keep": w.startswith((PAYLOAD, ENTRYPOINT, WRAPPER))}
-                    for p, w, *_ in factors],
+        "factors": [_factor(f) for f in factors],
         "carries": children,
     }
 
@@ -1683,9 +3453,19 @@ def _flag_deferred_exec(result, raw, downloaded):
                         "checksum: `echo '<sha256>  s.sh' | sha256sum -c`")
 
 
-def analyze(text, strict=False, introspect=False, basedir=".", _depth=0, _seen=None):
-    """Analyze a snippet; returns one result per command, in execution order."""
+def analyze(text, strict=False, introspect=False, basedir=".", _depth=0, _seen=None,
+            _defs=None, _at=None, kube_timeout=KUBE_TIMEOUT_DEFAULT):
+    """Analyze a snippet; returns one result per command, in execution order.
+
+    `_defs` carries the enclosing text's function and alias definitions into a
+    resolved body, and `_at` pins every command in that body to the offset of
+    the call site — body offsets are body-relative and would otherwise be
+    compared against offsets in a different string. The call site is the right
+    point because bash resolves a name when the line runs, so a helper defined
+    below the one that calls it is still in scope.
+    """
     results = []
+    defs = _defs if _defs is not None else (collect_definitions(text) if introspect else [])
     if FORKBOMB.search(text):
         results.append({
             "command": text.strip().splitlines()[0][:60], "rule": "EXEC-FORKBOMB", "known": True,
@@ -1702,13 +3482,17 @@ def analyze(text, strict=False, introspect=False, basedir=".", _depth=0, _seen=N
         line = text.count("\n", 0, offset) + 1
         for inner, ioff in subshell_commands(raw, offset):
             r = score_command(inner, tokenize(inner), strict=strict, introspect=introspect,
-                              depth=max(1, _depth), basedir=basedir, seen=_seen)
+                              depth=max(1, _depth), basedir=basedir, seen=_seen, defs=defs,
+                              offset=_at if _at is not None else ioff,
+                              kube_timeout=kube_timeout)
             if r:
                 r["line"] = text.count("\n", 0, ioff) + 1
                 r["substitution"] = True
                 results.append(r)
         r = score_command(raw, tokenize(raw), strict=strict, introspect=introspect,
-                          depth=_depth, basedir=basedir, seen=_seen)
+                          depth=_depth, basedir=basedir, seen=_seen, defs=defs,
+                          offset=_at if _at is not None else offset,
+                          kube_timeout=kube_timeout)
         if not r:
             continue
         r["line"] = line
@@ -1795,6 +3579,11 @@ def render_text(results, source=None, color=False, verbose=False, scale="bands")
             lines.append(f"    {sign:>4}  {f['why']}")
         if r["advice"] and r["level"] not in ("safe",):
             lines.append(f"    ↳ safer: {r['advice']}")
+        # The path from a score to its reasoning should be one command, not a
+        # search through the source. Shown on anything that scored, and under
+        # --verbose on the rest.
+        if r.get("known") and r["rule"] and (r["level"] != "safe" or verbose):
+            lines.append(f"    ↳ why:   scoville --why {r['rule']}")
         lines.append("")
     return "\n".join(lines)
 
@@ -1830,6 +3619,154 @@ def overall(results):
             "reversibility": revert, "commands": len(results), "worst": worst["command"]}
 
 
+# ------------------------------------------------------------ overrides ---
+#
+# The rule set is calibrated for the general case, but risk is contextual. A
+# repo where `kubectl delete ns ci-*` is routine teardown gets the same `high`
+# as one where it is an outage. Before this the only levers were --fail-on and
+# --strict, both global — so the first time a legitimate command tripped the
+# gate, the cheapest fix was to turn the gate off. That is the failure mode
+# this is designed against.
+
+CONFIG_NAMES = (".scovillerc", ".scovillerc.json")
+OVERRIDE_ACTIONS = ("deny", "rescore", "allow")
+
+
+class ConfigError(Exception):
+    """A config that cannot be read as written. Never guessed at: a misspelled
+    key that is silently ignored is an override the reader believes is in
+    force."""
+
+
+def find_config(basedir):
+    """The nearest `.scovillerc` at or above `basedir`, or None.
+
+    Walking up means a repo-root config covers every subdirectory, which is
+    where the file belongs — risk is a property of the repository, not of the
+    directory you happened to run from.
+    """
+    here = os.path.abspath(basedir)
+    while True:
+        for name in CONFIG_NAMES:
+            candidate = os.path.join(here, name)
+            if os.path.isfile(candidate):
+                return candidate
+        parent = os.path.dirname(here)
+        if parent == here:
+            return None
+        here = parent
+
+
+def load_config(path):
+    """Parse and validate a config file into a list of override entries.
+
+    JSON, not TOML. `tomllib` is 3.11+ and scoville supports 3.10, and the two
+    ways round that — vendoring a parser, or dropping a supported version — both
+    cost more than the comment syntax is worth for a file whose every entry
+    already carries a mandatory `why`. Switching is a one-line change if the
+    floor ever moves.
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except OSError as e:
+        raise ConfigError(f"{path}: {e}") from e
+    except ValueError as e:
+        raise ConfigError(f"{path}: not valid JSON: {e}") from e
+    if not isinstance(data, dict):
+        raise ConfigError(f"{path}: expected an object with allow/deny/rescore keys")
+
+    unknown = set(data) - set(OVERRIDE_ACTIONS)
+    if unknown:
+        raise ConfigError(f"{path}: unknown key(s) {', '.join(sorted(unknown))}; "
+                          f"expected {', '.join(OVERRIDE_ACTIONS)}")
+
+    entries = []
+    # Deny first, then rescore, then allow: a deny is a statement that the
+    # command is never acceptable here, and it has to survive an allow written
+    # by someone who did not know about it.
+    for action in OVERRIDE_ACTIONS:
+        for i, raw in enumerate(data.get(action) or []):
+            where = f"{path}: {action}[{i}]"
+            if not isinstance(raw, dict):
+                raise ConfigError(f"{where}: expected an object with `match` and `why`")
+            match = raw.get("match")
+            why = raw.get("why")
+            if not match or not isinstance(match, str):
+                raise ConfigError(f"{where}: needs a `match` glob")
+            # An override with no stated reason is how a config file becomes a
+            # list nobody can safely delete from.
+            if not why or not isinstance(why, str):
+                raise ConfigError(f"{where}: needs a `why` — an unexplained override "
+                                  f"is one nobody can safely remove later")
+            entry = {"action": action, "match": match, "why": why, "source": path}
+            if action == "rescore":
+                level = raw.get("level")
+                if level not in LEVELS:
+                    raise ConfigError(f"{where}: `level` must be one of "
+                                      f"{', '.join(LEVELS)}, got {level!r}")
+                entry["level"] = level
+            entries.append(entry)
+    return entries
+
+
+def match_override(entries, command):
+    """The first entry whose glob matches `command`, or None.
+
+    Globs, not regexes. A glob is reviewable at a glance in a file that governs
+    what a safety gate lets through; a regex in the same position is a thing
+    people paste and nobody audits.
+    """
+    for entry in entries:
+        if fnmatch.fnmatch(command, entry["match"]):
+            return entry
+    return None
+
+
+def apply_overrides(results, entries):
+    """Apply config overrides in place, recording each one in the factor trace.
+
+    A suppressed finding still appears, with its original score. Silent
+    suppression is indistinguishable from a missing rule, and the whole reason
+    for `why` is that someone reading the output six months later can tell the
+    difference.
+    """
+    if not entries:
+        return results
+    for r in results:
+        entry = match_override(entries, r["command"])
+        if not entry:
+            continue
+        r["override"] = {k: v for k, v in entry.items() if k != "source"}
+        was = r["level"]
+        if entry["action"] == "deny":
+            r["score"], r["level"] = 100, "critical"
+            note = f"denied by {os.path.basename(entry['source'])}: {entry['why']}"
+        elif entry["action"] == "rescore":
+            r["level"] = entry["level"]
+            r["score"] = SCORE_FOR_LEVEL[entry["level"]]
+            moved = f"re-scored {was} → {entry['level']}" if was != entry["level"] \
+                else f"pinned at {entry['level']}"
+            note = f"{moved} by {os.path.basename(entry['source'])}: {entry['why']}"
+        else:
+            note = (f"allowed by {os.path.basename(entry['source'])}: {entry['why']} "
+                    f"(scored {was}, does not trip --fail-on)")
+        r["factors"].append({"points": 0, "why": note, "keep": True})
+        apply_overrides(r.get("carries", []), entries)
+    return results
+
+
+# The bottom of each band: a re-score pins the level, and the score has to agree
+# with it or the two halves of the output contradict each other.
+SCORE_FOR_LEVEL = {"safe": 0, "low": 15, "medium": 35, "high": 60, "critical": 85}
+
+
+def gated(results):
+    """Results that --fail-on considers: everything not explicitly allowed."""
+    return [r for r in results
+            if (r.get("override") or {}).get("action") != "allow"]
+
+
 def main(argv=None):
     """CLI entry point. Returns the process exit status.
 
@@ -1849,15 +3786,44 @@ def main(argv=None):
     p.add_argument("--strict", action="store_true",
                    help="treat unrecognised commands as medium risk")
     p.add_argument("--introspect", action="store_true",
-                   help="resolve hidden image/container entrypoints via read-only docker inspect")
+                   help="resolve hidden image/container entrypoints via read-only docker inspect, "
+                        "and ask the current kube context what it is allowed to do")
+    p.add_argument("--kube-timeout", type=float, default=KUBE_TIMEOUT_DEFAULT, metavar="SEC",
+                   help="bound on one `kubectl auth can-i` call under --introspect "
+                        f"(default {KUBE_TIMEOUT_DEFAULT}); a timeout scores as if it had not "
+                        "been asked")
     p.add_argument("--quiet", "-q", action="store_true", help="one line per command")
     p.add_argument("--verbose", "-v", action="store_true", help="show zero-weight factors too")
     p.add_argument("--no-color", action="store_true",
                    help="never colourise (a non-tty and NO_COLOR already disable it)")
+    p.add_argument("--config", metavar="PATH",
+                   help="override file (default: nearest .scovillerc at or above the "
+                        "analysed file's directory)")
+    p.add_argument("--no-config", action="store_true",
+                   help="ignore any .scovillerc that would otherwise be discovered")
     p.add_argument("--list-rules", action="store_true",
                    help="print every rule and amplifier, then exit")
+    p.add_argument("--why", metavar="RULE",
+                   help="print the long form for one rule or amplifier id "
+                        "(as printed by --list-rules and on every finding), then exit")
     p.add_argument("--version", action="version", version=f"scoville {__version__}")
     args = p.parse_args(argv)
+
+    if args.why:
+        text = why_text(args.why)
+        if text is None:
+            print(f"scoville: no rule or amplifier called {args.why!r}", file=sys.stderr)
+            # A near miss is the common case — an id read off a finding with a
+            # typo, or half remembered. Guessing is cheaper than --list-rules.
+            near = difflib.get_close_matches(args.why.strip().lstrip("+").upper(),
+                                             rule_ids(), n=3, cutoff=0.5)
+            if near:
+                print(f"scoville: did you mean {', '.join(near)}?", file=sys.stderr)
+            else:
+                print("scoville: --list-rules prints every id", file=sys.stderr)
+            return 64
+        print(text, end="")
+        return 0
 
     if args.list_rules:
         for r in sorted(RULES, key=lambda x: x["id"]):
@@ -1892,7 +3858,27 @@ def main(argv=None):
         return 64
 
     basedir = os.path.dirname(os.path.abspath(args.file)) if args.file else os.getcwd()
-    results = analyze(text, strict=args.strict, introspect=args.introspect, basedir=basedir)
+
+    # An explicit --config that does not exist is an error, not a shrug: the
+    # caller asked for a policy and running without it would silently apply a
+    # different one than they think.
+    entries = []
+    if not args.no_config:
+        config_path = args.config or find_config(basedir)
+        if args.config and not os.path.isfile(args.config):
+            print(f"scoville: {args.config}: no such file", file=sys.stderr)
+            return 64
+        if config_path:
+            try:
+                entries = load_config(config_path)
+            except ConfigError as e:
+                print(f"scoville: {e}", file=sys.stderr)
+                return 64
+
+    results = apply_overrides(
+        analyze(text, strict=args.strict, introspect=args.introspect, basedir=basedir,
+                kube_timeout=args.kube_timeout),
+        entries)
     summary = overall(results)
 
     if args.format == "json":
@@ -1913,7 +3899,12 @@ def main(argv=None):
               f"{paint(label(summary['level'], args.scale), summary['level'], color)}{heat} "
               f"{summary['score']}/100 · scope {summary['scope']} · {summary['reversibility']}")
 
-    if args.fail_on and LEVELS.index(summary["level"]) >= LEVELS.index(args.fail_on):
+    # The summary reports what the commands really score; the gate ignores the
+    # ones this repo has explicitly allowed. Reporting an allowed command as
+    # safe would be a lie, and failing on it would be the reason someone turns
+    # --fail-on off altogether.
+    gate = overall(gated(results))
+    if args.fail_on and LEVELS.index(gate["level"]) >= LEVELS.index(args.fail_on):
         return 1
     return 0
 

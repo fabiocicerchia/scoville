@@ -108,6 +108,7 @@ scoville 'docker run acme/importer:1.2' --introspect   # resolve what actually r
 scoville -f deploy.sh --fail-on high                   # CI / agent gate
 scoville 'rm -rf /' --format json                      # machine-readable
 scoville --list-rules                                  # the whole rule set
+scoville --why K8S-DELETE-NS                            # why that rule exists
 ```
 
 Exit codes: `0` below threshold, `1` at or above `--fail-on`, `64` usage error.
@@ -119,8 +120,9 @@ $ scoville --help
 usage: scoville [-h] [-f FILE] [--format {text,json}]
                 [--scale {bands,peppers}]
                 [--fail-on {safe,low,medium,high,critical}] [--strict]
-                [--introspect] [--quiet] [--verbose] [--no-color]
-                [--list-rules] [--version]
+                [--introspect] [--kube-timeout SEC] [--quiet]
+                [--verbose] [--no-color] [--config PATH] [--no-config]
+                [--list-rules] [--why RULE] [--version]
                 [command ...]
 
 positional arguments:
@@ -137,13 +139,24 @@ options:
   --fail-on {safe,low,medium,high,critical}
                         exit 1 when any command reaches this level
   --strict              treat unrecognised commands as medium risk
-  --introspect          resolve hidden image/container entrypoints via read-
-                        only docker inspect
+  --introspect          resolve hidden image/container entrypoints via
+                        read-only docker inspect, and ask the current
+                        kube context what it is allowed to do
+  --kube-timeout SEC    bound on one `kubectl auth can-i` call under
+                        --introspect (default 3.0); a timeout scores
+                        as if it had not been asked
   --quiet, -q           one line per command
   --verbose, -v         show zero-weight factors too
   --no-color            never colourise (a non-tty and NO_COLOR already
                         disable it)
+  --config PATH         override file (default: nearest .scovillerc at or
+                        above the analysed file's directory)
+  --no-config           ignore any .scovillerc that would otherwise be
+                        discovered
   --list-rules          print every rule and amplifier, then exit
+  --why RULE            print the long form for one rule or amplifier id (as
+                        printed by --list-rules and on every finding), then
+                        exit
   --version             show program's version number and exit
 ```
 
@@ -156,13 +169,16 @@ kubectl delete ns prod
      +80  deleting a namespace cascades to everything inside it, PVCs included
      +15  the target names a production environment
     ↳ safer: there is no undo and no controller that will rebuild it — export the namespace first
+    ↳ why:   scoville --why K8S-DELETE-NS
 
 git push --force origin main
   HIGH        80/100  ·  scope: network  ·  irreversible
      +55  force-push overwrites remote history; other clones diverge silently
      +25  force-pushing the default branch: everyone else's clone breaks on the next pull
     ↳ safer: `--force-with-lease` refuses when the remote moved under you
+    ↳ why:   scoville --why GIT-PUSH-F
 scoville: 2 commands, worst CRITICAL 95/100 · scope cluster · irreversible
+
 ```
 
 More in [`docs/getting-started.md`](docs/getting-started.md).
@@ -182,6 +198,15 @@ read-only `docker inspect` calls, recursively, with a cycle guard. Nothing is
 ever executed. Reading resolves uncertainty in *both* directions: a wrapper that
 turns out to run `ls` scores lower once it has been read, not higher.
 
+`--introspect` also asks the cluster. `kubectl delete ns prod` scores the same
+whether the current context is cluster-admin on production or a read-only token
+that will be refused — so under `--introspect` scoville runs `kubectl auth
+can-i` (a read-only `SelfSubjectAccessReview`) and folds the answer in: a
+refusal dampens the score and names the context, cluster-admin amplifies it.
+**No answer never dampens** — a timeout, a missing kubeconfig or an unreachable
+cluster all score exactly as they do today, because a dampener that fires on a
+failed check under-reports risk.
+
 More in [`docs/architecture.md`](docs/architecture.md).
 
 ## Scoring
@@ -198,12 +223,14 @@ More in [`docs/scoring.md`](docs/scoring.md).
 
 ## Rules
 
-200 rules, 55 amplifiers and 5 softeners across filesystem and devices,
+259 rules, 64 amplifiers and 8 softeners across filesystem and devices,
 permissions, system and service state, networking, package managers, git,
 containers, Kubernetes, Terraform/Pulumi, AWS/GCP/Azure, databases, backup
-tooling, storage, virtualisation, audit trail and config management. The long
-tail — ~50 resource CLIs — is covered by verb classification rather than
-enumeration, and an unknown CLI still cannot score `safe` on `delete`.
+tooling, storage, virtualisation, audit trail and config management. Resource
+CLIs where the blast radius and the traffic are both high — `vault`, `velero`,
+`argocd`, `openstack`, `flyctl`, `gh` among them — are enumerated per resource;
+the remaining ~40 are covered by verb classification rather than enumeration,
+and an unknown CLI still cannot score `safe` on `delete`.
 
 The rule set *is* the product; it is meant to grow. Every rule carries a
 plain-language *why*, and destructive ones carry a safer alternative.

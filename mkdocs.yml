@@ -129,5 +129,6 @@ nav:
   - Getting Started: getting-started.md
   - Scoring: scoring.md
   - Rules: rules.md
+  - Per-repo overrides: config.md
   - Architecture: architecture.md
   - Known limits: limits.md

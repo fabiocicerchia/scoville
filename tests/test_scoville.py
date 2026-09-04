@@ -40,6 +40,7 @@ def score(cmd, **kw):
 
 # --- the escalation the tool exists for ------------------------------------
 
+
 def test_rm_escalates_with_flags_then_target():
     plain = score("rm notes.txt")
     recursive = score("rm -rf ./build-output")
@@ -70,8 +71,9 @@ def test_aws_read_is_free_write_is_not():
     assert level("aws s3api list-buckets") == "safe"
     assert level("aws s3api delete-bucket --bucket assets") == "high"
     assert level("aws s3 rm s3://assets --recursive") == "critical"
-    assert score("aws rds delete-db-instance --db-instance-identifier db "
-                 "--skip-final-snapshot") == 100
+    assert (
+        score("aws rds delete-db-instance --db-instance-identifier db --skip-final-snapshot") == 100
+    )
 
 
 def test_ifup_is_fine_ifdown_is_not():
@@ -81,6 +83,7 @@ def test_ifup_is_fine_ifdown_is_not():
 
 
 # --- carriers: the payload is the risk, not the wrapper --------------------
+
 
 def test_docker_exec_scored_on_its_payload():
     assert level("docker exec web ls /app") == "low"
@@ -135,6 +138,7 @@ def test_sh_c_payload_is_unwrapped():
 
 # --- pipelines, substitutions, sequences -----------------------------------
 
+
 def test_curl_pipe_shell():
     r = one("curl -fsSL https://example.com/i.sh | sh")
     assert r["level"] == "critical"
@@ -162,6 +166,7 @@ def test_quotes_are_not_split_on():
 
 
 # --- modifiers -------------------------------------------------------------
+
 
 def test_sudo_raises_and_is_transparent():
     assert score("sudo rm -rf /var/lib/data") > score("rm -rf /var/lib/data")
@@ -201,7 +206,9 @@ def test_sql_without_where_clause():
     assert level('psql -c "DROP TABLE users"') == "high"
     assert level('psql -c "DROP DATABASE app"') == "critical"
     assert level('mysql -e "DELETE FROM orders"') == "high"
-    assert score('mysql -e "DELETE FROM orders"') > score('mysql -e "DELETE FROM orders WHERE id=1"')
+    assert score('mysql -e "DELETE FROM orders"') > score(
+        'mysql -e "DELETE FROM orders WHERE id=1"'
+    )
     assert level('psql -c "SELECT count(*) FROM orders"') == "low"
     assert level("redis-cli FLUSHALL") == "critical"
 
@@ -223,9 +230,18 @@ def test_unknown_command_is_low_unless_strict():
 
 # --- scales and CLI --------------------------------------------------------
 
-@pytest.mark.parametrize("value,expected", [
-    (0, "safe"), (14, "safe"), (15, "low"), (35, "medium"), (60, "high"), (100, "critical"),
-])
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (0, "safe"),
+        (14, "safe"),
+        (15, "low"),
+        (35, "medium"),
+        (60, "high"),
+        (100, "critical"),
+    ],
+)
 def test_bands(value, expected):
     assert band(value) == expected
 
@@ -258,12 +274,17 @@ def test_list_rules(capsys):
 
 # --- introspection (faked docker: no daemon required) ----------------------
 
+
 def test_introspect_resolves_a_dangerous_entrypoint(monkeypatch):
     import scoville
+
     monkeypatch.setattr(scoville, "shutil", scoville.shutil)
     monkeypatch.setattr(scoville.shutil, "which", lambda _: "/usr/bin/docker")
-    monkeypatch.setattr(scoville, "_docker",
-                        lambda args, timeout=5: '["/bin/sh","-c","rm -rf /data"]|null|root|sha256:x')
+    monkeypatch.setattr(
+        scoville,
+        "_docker",
+        lambda args, timeout=5: '["/bin/sh","-c","rm -rf /data"]|null|root|sha256:x',
+    )
     r = one("docker run acme/cleaner:1.0", introspect=True)
     assert r["level"] == "critical"
     assert any("resolved entrypoint" in f["why"] for f in r["factors"])
@@ -272,6 +293,7 @@ def test_introspect_resolves_a_dangerous_entrypoint(monkeypatch):
 
 def test_introspect_reports_when_it_cannot_resolve(monkeypatch):
     import scoville
+
     monkeypatch.setattr(scoville.shutil, "which", lambda _: "/usr/bin/docker")
     monkeypatch.setattr(scoville, "_docker", lambda args, timeout=5: None)
     r = one("docker run acme/cleaner:1.0", introspect=True)
@@ -281,6 +303,7 @@ def test_introspect_reports_when_it_cannot_resolve(monkeypatch):
 
 def test_introspect_without_docker_says_so(monkeypatch):
     import scoville
+
     monkeypatch.setattr(scoville.shutil, "which", lambda _: None)
     r = one("docker run acme/cleaner:1.0", introspect=True)
     assert any("no docker CLI" in f["why"] for f in r["factors"])
@@ -313,29 +336,36 @@ def test_quoted_command_text_is_not_treated_as_a_command():
 
 # --- the long tail of resource CLIs ----------------------------------------
 
-@pytest.mark.parametrize("cmd", [
-    "hcloud server delete my-db",
-    "scw instance server terminate 11111111",
-    "doctl compute droplet delete web-1",
-    "linode-cli linodes delete 123",
-    "flyctl apps destroy api",
-    "wrangler r2 bucket delete assets",
-    "pscale database delete app main",
-    "incus delete web-1",
-    "openstack server delete web-1",
-])
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "hcloud server delete my-db",
+        "scw instance server terminate 11111111",
+        "doctl compute droplet delete web-1",
+        "linode-cli linodes delete 123",
+        "flyctl apps destroy api",
+        "wrangler r2 bucket delete assets",
+        "pscale database delete app main",
+        "incus delete web-1",
+        "openstack server delete web-1",
+    ],
+)
 def test_destructive_verbs_across_cloud_clis(cmd):
     assert level(cmd) in ("high", "critical")
 
 
-@pytest.mark.parametrize("cmd", [
-    "hcloud server list",
-    "scw instance server list",
-    "doctl compute droplet list",
-    "gh pr list",
-    "zfs list",
-    "velero backup describe daily-1",
-])
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "hcloud server list",
+        "scw instance server list",
+        "doctl compute droplet list",
+        "gh pr list",
+        "zfs list",
+        "velero backup describe daily-1",
+    ],
+)
 def test_read_verbs_stay_free(cmd):
     assert level(cmd) == "safe"
 
@@ -390,10 +420,13 @@ def test_find_fans_out_over_the_match_set():
 
 # --- generic arguments: the same signal on any binary ----------------------
 
+
 def test_secret_on_the_command_line():
     r = one("mysql -h db --password=hunter2 -e 'SELECT 1'")
     assert any("visible to every user" in f["why"] for f in r["factors"])
-    assert score("curl --token=abc123 https://api.example.com") > score("curl https://api.example.com")
+    assert score("curl --token=abc123 https://api.example.com") > score(
+        "curl https://api.example.com"
+    )
 
 
 def test_verification_disabled_is_generic():
@@ -412,8 +445,9 @@ def test_softeners_lower_the_careful_form():
     assert score("rm -ri /tmp/cache") < score("rm -rf /tmp/cache")
     assert score("sed -i.bak 's/a/b/' app.conf") < score("sed -i 's/a/b/' app.conf")
     assert score("git push --force-with-lease origin main") < score("git push --force origin main")
-    assert score("ansible all -m shell -a 'rm -rf /tmp/x' --limit web-1") < \
-        score("ansible all -m shell -a 'rm -rf /tmp/x'")
+    assert score("ansible all -m shell -a 'rm -rf /tmp/x' --limit web-1") < score(
+        "ansible all -m shell -a 'rm -rf /tmp/x'"
+    )
 
 
 def test_a_rule_does_not_also_collect_the_amp_it_exists_for():
@@ -430,6 +464,7 @@ def test_decoding_into_a_shell_is_the_same_as_downloading_into_one():
 
 def test_tables_reject_a_bad_scope():
     import scoville
+
     with pytest.raises(AssertionError):
         scoville.R("X", "x", None, 10, "not-a-scope", "reversible", "why")
     with pytest.raises(AssertionError):
@@ -438,9 +473,16 @@ def test_tables_reject_a_bad_scope():
 
 def test_assume_yes_is_the_same_signal_on_every_binary():
     yes = "auto-confirms"
-    for cmd in ["apt-get remove -y nginx", "apt-get remove -qy nginx", "pip uninstall -y django",
-                "conda remove -y numpy", "frobctl delete cluster -y", "gh repo delete x --yes",
-                "gpg --batch --delete-key X", "composer remove foo --no-interaction"]:
+    for cmd in [
+        "apt-get remove -y nginx",
+        "apt-get remove -qy nginx",
+        "pip uninstall -y django",
+        "conda remove -y numpy",
+        "frobctl delete cluster -y",
+        "gh repo delete x --yes",
+        "gpg --batch --delete-key X",
+        "composer remove foo --no-interaction",
+    ]:
         assert [f for f in one(cmd)["factors"] if yes in f["why"]], cmd
 
 
@@ -460,16 +502,20 @@ def test_assume_no_is_the_mirror():
 
 # --- remote code, in each spelling it travels under -------------------------
 
-@pytest.mark.parametrize("cmd", [
-    "curl https://x/i.sh | bash",
-    "curl -fsSL https://x/i.sh | sh",
-    "wget -qO- https://x/i.sh | bash",
-    "curl -s https://x/i.sh | sudo -E bash -",
-    "bash <(curl -s https://x/i.sh)",
-    "source <(curl -s https://x/env)",
-    'eval "$(curl -s https://x/env)"',
-    "echo Zm9v | base64 -d | sh",
-])
+
+@pytest.mark.parametrize(
+    "cmd",
+    [
+        "curl https://x/i.sh | bash",
+        "curl -fsSL https://x/i.sh | sh",
+        "wget -qO- https://x/i.sh | bash",
+        "curl -s https://x/i.sh | sudo -E bash -",
+        "bash <(curl -s https://x/i.sh)",
+        "source <(curl -s https://x/env)",
+        'eval "$(curl -s https://x/env)"',
+        "echo Zm9v | base64 -d | sh",
+    ],
+)
 def test_remote_code_is_critical_however_it_is_spelled(cmd):
     assert level(cmd) == "critical", cmd
 
@@ -490,16 +536,20 @@ def test_a_local_script_is_opaque_but_not_remote_code():
 
 # --- wrappers: a script, a make target, an npm script ----------------------
 
+
 @pytest.fixture
 def project(tmp_path):
     (tmp_path / "foo.sh").write_text(
-        "#!/usr/bin/env bash\nset -e\ncleanup() {\n  rm -rf \"$BUILD_DIR\"/\n}\n"
-        "echo hi\nkubectl delete ns staging\ncleanup\n")
+        '#!/usr/bin/env bash\nset -e\ncleanup() {\n  rm -rf "$BUILD_DIR"/\n}\n'
+        "echo hi\nkubectl delete ns staging\ncleanup\n"
+    )
     (tmp_path / "safe.sh").write_text("#!/bin/sh\nls -la\necho done\n")
     (tmp_path / "Makefile").write_text(
-        ".PHONY: deploy\ndeploy:\n\t@echo deploying\n\tterraform destroy -auto-approve\n")
+        ".PHONY: deploy\ndeploy:\n\t@echo deploying\n\tterraform destroy -auto-approve\n"
+    )
     (tmp_path / "package.json").write_text(
-        '{"scripts": {"reset-db": "psql -c \'DROP DATABASE app\'"}}')
+        '{"scripts": {"reset-db": "psql -c \'DROP DATABASE app\'"}}'
+    )
     (tmp_path / "loop.sh").write_text("#!/bin/sh\nbash loop.sh\n")
     return str(tmp_path)
 
@@ -525,15 +575,19 @@ def test_introspect_reads_the_wrapper_and_names_the_line(project):
 def test_reading_a_harmless_wrapper_lowers_the_score(project):
     # introspection resolves uncertainty in both directions
     assert worst("./safe.sh", introspect=True, basedir=project)["level"] == "safe"
-    assert worst("./safe.sh", introspect=True, basedir=project)["score"] < worst("./safe.sh")["score"]
+    assert (
+        worst("./safe.sh", introspect=True, basedir=project)["score"] < worst("./safe.sh")["score"]
+    )
 
 
 def test_make_target_and_npm_script_are_resolved(project):
     assert worst("make deploy", introspect=True, basedir=project)["level"] == "critical"
     assert worst("npm run reset-db", introspect=True, basedir=project)["level"] == "critical"
     # a target that does not exist cannot be read, and says so
-    assert any("could not be read" in f["why"]
-               for f in worst("make nope", introspect=True, basedir=project)["factors"])
+    assert any(
+        "could not be read" in f["why"]
+        for f in worst("make nope", introspect=True, basedir=project)["factors"]
+    )
 
 
 def test_a_self_referential_script_terminates(project):
@@ -542,8 +596,9 @@ def test_a_self_referential_script_terminates(project):
 
 def test_a_rule_that_knows_the_script_is_not_also_opaque():
     # MIGRATE-DJANGO already knows what manage.py flush does
-    assert not [f for f in worst("python manage.py flush")["factors"]
-                if "inside the script" in f["why"]]
+    assert not [
+        f for f in worst("python manage.py flush")["factors"] if "inside the script" in f["why"]
+    ]
 
 
 def test_downloaded_script_is_not_double_counted():
@@ -568,8 +623,10 @@ def test_source_is_a_readable_wrapper_not_an_eval():
 
 # --- the peppers scale -----------------------------------------------------
 
+
 def test_pepper_labels_cover_every_band():
     import scoville
+
     assert set(scoville.PEPPERS) == set(scoville.LEVELS)
     for lvl in scoville.LEVELS:
         name, slug, heat, shu = scoville.PEPPERS[lvl]
@@ -580,6 +637,7 @@ def test_pepper_labels_cover_every_band():
 
 def test_pepper_heat_rises_with_the_band():
     import scoville
+
     heats = [scoville.PEPPERS[lvl][2] for lvl in scoville.LEVELS]
     assert heats == sorted(heats)
 
@@ -601,6 +659,7 @@ def test_quiet_uses_ascii_slugs(capsys):
 
 def test_json_is_unaffected_by_the_scale(capsys):
     import json
+
     main(["rm -rf /", "--format", "json", "--scale", "peppers"])
     payload = json.loads(capsys.readouterr().out)
     assert payload["overall"]["level"] == "critical", "machine output stays on the bands"
@@ -661,14 +720,14 @@ def test_resolution_is_opt_in():
 def test_a_function_defined_after_the_call_is_not_applied():
     # bash reads top to bottom: at line 1 `cleanup` is not a function yet, and
     # scoring it as one would be a false positive on a very common layout.
-    text = 'cleanup prod\ncleanup() { rm -rf /var/lib/data; }\n'
+    text = "cleanup prod\ncleanup() { rm -rf /var/lib/data; }\n"
     call = line(text, "cleanup prod", introspect=True)
     assert call["rule"] == "UNKNOWN"
     assert call["level"] == "low"
 
 
 def test_the_last_definition_before_the_call_wins():
-    text = 'sync() { echo safe; }\nsync() { rm -rf /; }\nsync now\n'
+    text = "sync() { echo safe; }\nsync() { rm -rf /; }\nsync now\n"
     call = line(text, "sync now", introspect=True)
     assert "defined on line 2" in call["factors"][0]["why"]
     assert call["level"] == "critical"
@@ -677,14 +736,14 @@ def test_the_last_definition_before_the_call_wins():
 def test_a_name_is_resolved_at_the_call_site_not_the_definition():
     # `a` is defined above `b` but called below both, so `b` is in scope by the
     # time `a` runs — resolving at definition time would miss the rm entirely.
-    text = 'a() { b; }\nb() { rm -rf /etc; }\na\n'
+    text = "a() { b; }\nb() { rm -rf /etc; }\na\n"
     call = analyze(text, introspect=True)[-1]
     assert call["command"] == "a"
     assert call["level"] == "critical"
 
 
 def test_direct_recursion_terminates_and_still_scores_the_body():
-    text = 'loop() { loop; rm -rf /tmp/x; }\nloop\n'
+    text = "loop() { loop; rm -rf /tmp/x; }\nloop\n"
     results = analyze(text, introspect=True)
     call = results[-1]
     assert call["command"] == "loop"
@@ -693,7 +752,7 @@ def test_direct_recursion_terminates_and_still_scores_the_body():
 
 
 def test_mutual_recursion_terminates():
-    text = 'a() { b; }\nb() { a; rm -rf /etc; }\na\n'
+    text = "a() { b; }\nb() { a; rm -rf /etc; }\na\n"
     results = analyze(text, introspect=True)  # must not hang or recurse away
     assert results[-1]["level"] == "critical"
 
@@ -701,7 +760,7 @@ def test_mutual_recursion_terminates():
 def test_calling_the_same_helper_twice_scores_both_calls():
     # The cycle guard is a call *stack*, not a visited set: a second, separate
     # call is ordinary and must not be reported as recursion.
-    text = 'wipe() { rm -rf /var/lib/data; }\nwipe\nwipe\n'
+    text = "wipe() { rm -rf /var/lib/data; }\nwipe\nwipe\n"
     results = [r for r in analyze(text, introspect=True) if r["command"] == "wipe"]
     assert len(results) == 2
     assert results[0]["score"] == results[1]["score"] > 0
@@ -720,7 +779,7 @@ def test_nothing_outside_the_analysed_text_is_read(tmp_path, monkeypatch):
 
 
 def test_an_unterminated_function_body_is_skipped_not_half_scored():
-    text = 'broken() { rm -rf /\ndeploy prod\n'
+    text = "broken() { rm -rf /\ndeploy prod\n"
     # No closing brace: scoring half a body is worse than not resolving it.
     assert line(text, "deploy prod", introspect=True)["rule"] == "UNKNOWN"
 
@@ -777,14 +836,17 @@ def test_allow_keeps_the_real_score_but_does_not_trip_the_gate(rc, capsys):
     assert r["override"]["action"] == "allow"
     assert "routine CI teardown" in r["factors"][-1]["why"]
 
-    code = main(["kubectl delete ns ci-1234", "--fail-on", "high",
-                 "--config", str(rc / ".scovillerc")])
+    code = main(
+        ["kubectl delete ns ci-1234", "--fail-on", "high", "--config", str(rc / ".scovillerc")]
+    )
     assert code == 0
 
 
 def test_an_unallowed_command_still_trips_the_gate(rc):
-    assert main(["kubectl delete ns prod", "--fail-on", "high",
-                 "--config", str(rc / ".scovillerc")]) == 1
+    assert (
+        main(["kubectl delete ns prod", "--fail-on", "high", "--config", str(rc / ".scovillerc")])
+        == 1
+    )
 
 
 def test_deny_forces_critical_whatever_the_command_scores(rc):
@@ -798,10 +860,14 @@ def test_deny_forces_critical_whatever_the_command_scores(rc):
 
 def test_deny_beats_allow_when_both_match(tmp_path):
     cfg = tmp_path / ".scovillerc"
-    cfg.write_text(json.dumps({
-        "allow": [{"match": "rm *", "why": "we delete a lot"}],
-        "deny": [{"match": "rm -rf /*", "why": "no"}],
-    }))
+    cfg.write_text(
+        json.dumps(
+            {
+                "allow": [{"match": "rm *", "why": "we delete a lot"}],
+                "deny": [{"match": "rm -rf /*", "why": "no"}],
+            }
+        )
+    )
     entries = load_config(str(cfg))
     # A deny has to survive an allow written by someone who did not know about it.
     assert scored("rm -rf /var", entries)["override"]["action"] == "deny"
@@ -820,8 +886,12 @@ def test_an_override_is_visible_in_json(rc, capsys):
     main(["terraform apply", "--format", "json", "--config", str(rc / ".scovillerc")])
     payload = json.loads(capsys.readouterr().out)
     override = payload["commands"][0]["override"]
-    assert override == {"action": "rescore", "match": "terraform apply*",
-                        "why": "shared state", "level": "critical"}
+    assert override == {
+        "action": "rescore",
+        "match": "terraform apply*",
+        "why": "shared state",
+        "level": "critical",
+    }
 
 
 def test_strict_does_not_defeat_an_allow(tmp_path):
@@ -829,8 +899,9 @@ def test_strict_does_not_defeat_an_allow(tmp_path):
     cfg.write_text(json.dumps({"allow": [{"match": "frobnicate *", "why": "ours"}]}))
     # --strict raises unknown commands; an explicit allow still holds the gate
     # open, because the repo has said it knows what this one is.
-    assert main(["frobnicate the-thing", "--strict", "--fail-on", "medium",
-                 "--config", str(cfg)]) == 0
+    assert (
+        main(["frobnicate the-thing", "--strict", "--fail-on", "medium", "--config", str(cfg)]) == 0
+    )
     assert main(["frobnicate the-thing", "--strict", "--fail-on", "medium"]) == 1
 
 
@@ -873,6 +944,7 @@ def test_a_named_config_that_is_missing_is_an_error(tmp_path):
 
 # --- promoted CLIs, and the floor underneath everything else ----------------
 
+
 def rule_id(cmd):
     return one(cmd)["rule"]
 
@@ -909,6 +981,7 @@ def test_a_cli_nobody_has_enumerated_still_cannot_score_safe():
 
 
 # --- the verbs that lie -----------------------------------------------------
+
 
 def test_vault_kv_delete_is_soft_and_kv_destroy_is_not():
     # `kv delete` marks versions deleted; `kv undelete` brings them back. The
@@ -949,6 +1022,7 @@ def test_fly_secrets_set_is_a_restart():
 
 
 # --- per-resource bases, which is the point of promoting a CLI --------------
+
 
 def test_the_resource_moves_the_score_within_one_cli():
     assert score("openstack server stop web-1") < score("openstack server delete web-1")
@@ -1152,11 +1226,13 @@ def test_a_refusal_scores_down_but_never_to_nothing(kubectl):
 
 
 def test_cluster_admin_is_an_amplifier_on_a_destructive_verb(kubectl):
-    kubectl({
-        "config current-context": "kind-kind",
-        "auth can-i delete namespaces": "yes",
-        "auth can-i * *": "yes",
-    })
+    kubectl(
+        {
+            "config current-context": "kind-kind",
+            "auth can-i delete namespaces": "yes",
+            "auth can-i * *": "yes",
+        }
+    )
     plain = one("kubectl delete ns prod")
     admin = one("kubectl delete ns prod", introspect=True)
     assert admin["score"] > plain["score"]
@@ -1165,11 +1241,13 @@ def test_cluster_admin_is_an_amplifier_on_a_destructive_verb(kubectl):
 
 
 def test_permitted_but_not_admin_changes_nothing_and_says_why(kubectl):
-    kubectl({
-        "config current-context": "team-ns",
-        "auth can-i delete namespaces": "yes",
-        "auth can-i * *": "no",
-    })
+    kubectl(
+        {
+            "config current-context": "team-ns",
+            "auth can-i delete namespaces": "yes",
+            "auth can-i * *": "no",
+        }
+    )
     plain = one("kubectl delete ns prod")
     known = one("kubectl delete ns prod", introspect=True)
     assert known["score"] == plain["score"]
@@ -1179,13 +1257,16 @@ def test_permitted_but_not_admin_changes_nothing_and_says_why(kubectl):
 # --- failing closed: the direction that matters -----------------------------
 
 
-@pytest.mark.parametrize("answers", [
-    {},                                             # no kubeconfig, no context
-    {**CTX},                                        # context, but can-i never answers
-    {**CTX, "auth can-i delete namespaces": ""},    # empty answer
-    {**CTX, "auth can-i delete namespaces": "error: You must be logged in"},
-    {**CTX, "auth can-i delete namespaces": "maybe"},
-])
+@pytest.mark.parametrize(
+    "answers",
+    [
+        {},  # no kubeconfig, no context
+        {**CTX},  # context, but can-i never answers
+        {**CTX, "auth can-i delete namespaces": ""},  # empty answer
+        {**CTX, "auth can-i delete namespaces": "error: You must be logged in"},
+        {**CTX, "auth can-i delete namespaces": "maybe"},
+    ],
+)
 def test_no_answer_never_dampens(kubectl, answers):
     """A dampener that fires on a bad result under-reports risk, which is the
     one kind of wrong answer this tool must not give."""
@@ -1211,16 +1292,19 @@ def test_the_timeout_is_bounded_and_configurable(kubectl):
 # --- parsing the command line ----------------------------------------------
 
 
-@pytest.mark.parametrize("cmd,want", [
-    ("delete ns prod", ("delete", "ns", None)),
-    ("delete pod/foo", ("delete", "pod", None)),
-    ("-n kube-system delete deploy x", ("delete", "deploy", "kube-system")),
-    ("delete deploy x --namespace=prod", ("delete", "deploy", "prod")),
-    ("get pods -o json", ("get", "pods", None)),
-    ("exec -n prod mypod -- rm -rf /", ("exec", "mypod", "prod")),
-    ("version", ("version", None, None)),
-    ("", (None, None, None)),
-])
+@pytest.mark.parametrize(
+    "cmd,want",
+    [
+        ("delete ns prod", ("delete", "ns", None)),
+        ("delete pod/foo", ("delete", "pod", None)),
+        ("-n kube-system delete deploy x", ("delete", "deploy", "kube-system")),
+        ("delete deploy x --namespace=prod", ("delete", "deploy", "prod")),
+        ("get pods -o json", ("get", "pods", None)),
+        ("exec -n prod mypod -- rm -rf /", ("exec", "mypod", "prod")),
+        ("version", ("version", None, None)),
+        ("", (None, None, None)),
+    ],
+)
 def test_the_verb_and_resource_come_from_the_positionals(cmd, want):
     assert kube_target(cmd.split()) == want
 
@@ -1233,15 +1317,25 @@ def test_a_flag_value_is_not_mistaken_for_the_resource():
 
 def test_kubectl_verbs_are_mapped_to_the_rbac_verbs_they_need(kubectl):
     # `apply` is not an RBAC verb; asking for it gets a useless answer.
-    fake = kubectl({"config current-context": "c", "auth can-i patch deployments": "yes",
-                    "auth can-i * *": "no"})
+    fake = kubectl(
+        {
+            "config current-context": "c",
+            "auth can-i patch deployments": "yes",
+            "auth can-i * *": "no",
+        }
+    )
     one("kubectl apply deploy web", introspect=True)
     assert "auth can-i patch deployments" in fake.calls
 
 
 def test_a_short_resource_name_is_expanded_before_it_is_asked_about(kubectl):
-    fake = kubectl({"config current-context": "c", "auth can-i delete namespaces": "yes",
-                    "auth can-i * *": "no"})
+    fake = kubectl(
+        {
+            "config current-context": "c",
+            "auth can-i delete namespaces": "yes",
+            "auth can-i * *": "no",
+        }
+    )
     one("kubectl delete ns prod", introspect=True)
     assert "auth can-i delete namespaces" in fake.calls
 

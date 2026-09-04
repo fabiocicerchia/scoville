@@ -63,7 +63,8 @@ jobs:
             echo "::notice::FOSSA_API_KEY not configured — skipping license scan."
             exit 0
           fi
-          curl -fsSL https://raw.githubusercontent.com/fossas/fossa-cli/master/install-latest.sh | bash
+          # Pinned to a commit so the piped script is a fixed, reviewable artifact.
+          curl -fsSL https://raw.githubusercontent.com/fossas/fossa-cli/10e2abc671d51ed671486da984d0fe601fa434d3/install-latest.sh | bash
           fossa analyze
           # Fails the job on a policy violation: copyleft in a permissive repo,
           # or a dependency with no resolvable license.

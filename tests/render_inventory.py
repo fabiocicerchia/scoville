@@ -5,6 +5,7 @@ Scores and facets come from the engine itself, so the published inventory
 cannot disagree with what the tool does — the levels in corpus.tsv are the
 assertion, everything else in the table is generated.
 """
+
 import sys
 from pathlib import Path
 
@@ -54,8 +55,10 @@ def main():
         counts[level] += 1
         total += 1
         cmd = command.replace("|", "\\|")
-        body.append(f"| `{level}` {worst['score']} | `{cmd}` | {worst['scope']} "
-                    f"| {worst['reversibility']} |")
+        body.append(
+            f"| `{level}` {worst['score']} | `{cmd}` | {worst['scope']} "
+            f"| {worst['reversibility']} |"
+        )
 
     summary = " · ".join(f"**{n}** {lvl}" for lvl, n in counts.items() if n)
     out.append(f"{total} commands catalogued: {summary}.\n")

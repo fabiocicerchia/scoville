@@ -5,6 +5,7 @@ each one should land in. Running it as a test is what keeps the calibration
 from drifting: a rule change that moves a command between bands fails here,
 and either the rule or the expectation has to be argued for.
 """
+
 import subprocess
 import sys
 from pathlib import Path
@@ -69,6 +70,7 @@ def test_corpus_command_scores_as_catalogued(expected, command):
 
 def test_inventory_markdown_is_in_sync():
     """INVENTORY.md is generated — `make inventory` regenerates it."""
-    rendered = subprocess.run([sys.executable, str(RENDER)], capture_output=True, text=True,
-                              check=True).stdout
+    rendered = subprocess.run(
+        [sys.executable, str(RENDER)], capture_output=True, text=True, check=True
+    ).stdout
     assert INVENTORY.read_text() == rendered, "INVENTORY.md is stale — run `make inventory`"

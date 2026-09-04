@@ -78,6 +78,10 @@ repos:
         # warning and above. The style/info notes are mostly SC1091 (a sourced
         # file the linter cannot see), which is noise in a repo of small scripts.
         args: [--severity=warning]
+        # The sample input is unsafe on purpose: its own header says so, and the
+        # unquoted-expansion line SC2115 objects to is the hazard the example
+        # exists to demonstrate. Linting it clean would delete the example.
+        exclude: ^examples/basic/deploy\.sh$
 
   # Dockerfiles. Rules and thresholds live in .hadolint.yaml.
   - repo: https://github.com/hadolint/hadolint

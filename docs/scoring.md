@@ -7,13 +7,13 @@ and clamped to 0–100.
 
 ## Bands
 
-| Band | Score | Meaning |
-|---|---|---|
-| `safe` | 0–14 | reads state, changes nothing |
-| `low` | 15–34 | local, trivially undone |
-| `medium` | 35–59 | mutates real state, recoverable with effort |
-| `high` | 60–84 | destructive and scoped |
-| `critical` | 85–100 | unbounded, irreversible, or both |
+| Band       | Score  | Meaning                                     |
+| ---------- | ------ | ------------------------------------------- |
+| `safe`     | 0–14   | reads state, changes nothing                |
+| `low`      | 15–34  | local, trivially undone                     |
+| `medium`   | 35–59  | mutates real state, recoverable with effort |
+| `high`     | 60–84  | destructive and scoped                      |
+| `critical` | 85–100 | unbounded, irreversible, or both            |
 
 Bands are deliberately coarse: the band drives decisions, the score only orders
 commands within a band.
@@ -36,12 +36,12 @@ the widest one it touches.
 commands. Same analysis, same score, same factors — only the label changes, and
 `--format json` always stays on the band names.
 
-| Band | Pepper | Scoville units |
-|---|---|---|
-| `safe` | bell pepper | 0 |
-| `low` | jalapeño | 2,500–8,000 |
-| `medium` | cayenne | 30,000–50,000 |
-| `high` | habanero | 100,000–350,000 |
+| Band       | Pepper          | Scoville units      |
+| ---------- | --------------- | ------------------- |
+| `safe`     | bell pepper     | 0                   |
+| `low`      | jalapeño        | 2,500–8,000         |
+| `medium`   | cayenne         | 30,000–50,000       |
+| `high`     | habanero        | 100,000–350,000     |
 | `critical` | carolina reaper | 1,600,000–2,200,000 |
 
 ```console

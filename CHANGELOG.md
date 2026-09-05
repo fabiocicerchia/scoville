@@ -10,82 +10,72 @@ Conventional Commit messages — don't edit them by hand.
 
 ## [0.3.0](https://github.com/fabiocicerchia/scoville/compare/v0.2.1...v0.3.0) (2026-09-03)
 
-
 ### Features
 
-* .scovillerc overrides, function/alias resolution, six enumerated CLIs, and --why ([#34](https://github.com/fabiocicerchia/scoville/issues/34)) ([2c9a3ba](https://github.com/fabiocicerchia/scoville/commit/2c9a3ba8a9ff879a10e9406ac7627b4f50db4492))
+- .scovillerc overrides, function/alias resolution, six enumerated CLIs, and --why ([#34](https://github.com/fabiocicerchia/scoville/issues/34)) ([2c9a3ba](https://github.com/fabiocicerchia/scoville/commit/2c9a3ba8a9ff879a10e9406ac7627b4f50db4492))
 
 ## [0.2.1](https://github.com/fabiocicerchia/scoville/compare/v0.2.0...v0.2.1) (2026-08-29)
 
-
 ### Bug Fixes
 
-* unblock quality and clear the Scorecard pinned-dependencies finding ([#26](https://github.com/fabiocicerchia/scoville/issues/26)) ([fa4750e](https://github.com/fabiocicerchia/scoville/commit/fa4750e1663b693e2cc98e56b06346e885c3d3d6))
+- unblock quality and clear the Scorecard pinned-dependencies finding ([#26](https://github.com/fabiocicerchia/scoville/issues/26)) ([fa4750e](https://github.com/fabiocicerchia/scoville/commit/fa4750e1663b693e2cc98e56b06346e885c3d3d6))
 
 ## [0.2.0](https://github.com/fabiocicerchia/scoville/compare/v0.1.7...v0.2.0) (2026-08-25)
 
-
 ### Features
 
-* **docs:** build the docs site in Actions and drop Read the Docs ([#25](https://github.com/fabiocicerchia/scoville/issues/25)) ([25753b2](https://github.com/fabiocicerchia/scoville/commit/25753b2d70da6f22895376bb8fe5691ae58d90f7))
-
+- **docs:** build the docs site in Actions and drop Read the Docs ([#25](https://github.com/fabiocicerchia/scoville/issues/25)) ([25753b2](https://github.com/fabiocicerchia/scoville/commit/25753b2d70da6f22895376bb8fe5691ae58d90f7))
 
 ### Bug Fixes
 
-* **ci:** compute the next release PR after the draft is published ([#22](https://github.com/fabiocicerchia/scoville/issues/22)) ([e27b450](https://github.com/fabiocicerchia/scoville/commit/e27b450a87195cca51b2af5037e0c5d3e65cbb19))
+- **ci:** compute the next release PR after the draft is published ([#22](https://github.com/fabiocicerchia/scoville/issues/22)) ([e27b450](https://github.com/fabiocicerchia/scoville/commit/e27b450a87195cca51b2af5037e0c5d3e65cbb19))
 
 ## [0.1.7](https://github.com/fabiocicerchia/scoville/compare/v0.1.6...v0.1.7) (2026-08-24)
 
-
 ### Documentation
 
-* split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
+- split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
 
 ## [0.1.6](https://github.com/fabiocicerchia/scoville/compare/v0.1.5...v0.1.6) (2026-08-24)
 
-
 ### Documentation
 
-* split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
+- split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
 
 ## [0.1.5](https://github.com/fabiocicerchia/scoville/compare/v0.1.4...v0.1.5) (2026-08-24)
 
-
 ### Documentation
 
-* split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
+- split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
 
 ## [0.1.4](https://github.com/fabiocicerchia/scoville/compare/v0.1.3...v0.1.4) (2026-08-24)
 
-
 ### Documentation
 
-* split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
+- split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
 
 ## [0.1.3](https://github.com/fabiocicerchia/scoville/compare/v0.1.2...v0.1.3) (2026-08-24)
 
-
 ### Documentation
 
-* split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
+- split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
 
 ## [0.1.2](https://github.com/fabiocicerchia/scoville/compare/v0.1.1...v0.1.2) (2026-08-24)
 
-
 ### Documentation
 
-* split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
+- split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
 
 ## [0.1.1](https://github.com/fabiocicerchia/scoville/compare/v0.1.0...v0.1.1) (2026-08-24)
 
-
 ### Documentation
 
-* split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
+- split the README into docs pages and drop the roadmap ([15faf57](https://github.com/fabiocicerchia/scoville/commit/15faf57c358f778fe376e67b51ccbd85f2e740f4))
 
 ## [Unreleased]
 
 ### Added
+
 - Initial release: scoring engine, scope and reversibility facets, factor
   traces, payload unwrapping, read-only introspection, JSON output and the
   `--fail-on` gate.

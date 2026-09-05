@@ -56,15 +56,15 @@ cat job.sh | scoville                           # or stdin
 
 Useful flags:
 
-| Flag | What it does |
-|---|---|
-| `--fail-on LEVEL` | exit 1 at `safe`\|`low`\|`medium`\|`high`\|`critical` |
-| `--strict` | unknown commands count as medium, not safe |
-| `--introspect` | read wrapper scripts, make targets, npm scripts and image entrypoints (read-only; never executes) |
-| `--format json` | machine-readable, every factor included |
-| `--scale peppers` | name the bands after the peppers instead |
-| `--list-rules` | print the whole rule set |
-| `--why RULE` | the long form for one rule: what it matches, why that band |
+| Flag              | What it does                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------- |
+| `--fail-on LEVEL` | exit 1 at `safe`\|`low`\|`medium`\|`high`\|`critical`                                             |
+| `--strict`        | unknown commands count as medium, not safe                                                        |
+| `--introspect`    | read wrapper scripts, make targets, npm scripts and image entrypoints (read-only; never executes) |
+| `--format json`   | machine-readable, every factor included                                                           |
+| `--scale peppers` | name the bands after the peppers instead                                                          |
+| `--list-rules`    | print the whole rule set                                                                          |
+| `--why RULE`      | the long form for one rule: what it matches, why that band                                        |
 
 Exit codes: `0` below threshold, `1` at or above `--fail-on`, `64` usage error.
 

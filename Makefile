@@ -9,7 +9,7 @@
 
 ##@ General
 
-.PHONY: help
+.PHONY: help setup build install test lint run format analyze
 help: ## Show this help
 	awk 'BEGIN {FS = ":.*## "} \
 		/^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } \
@@ -33,8 +33,8 @@ install: ## Install the package
 ##@ Quality
 
 .PHONY: lint
-lint: ## Run ruff
-	ruff check .
+lint: ## Run the whole gate — every hook, every file
+	pre-commit run --all-files
 
 .PHONY: test
 test: ## Run tests
@@ -51,3 +51,12 @@ build: ## Build sdist and wheel
 .PHONY: inventory
 inventory: ## Regenerate INVENTORY.md from the rule table
 	python3 tests/render_inventory.py > INVENTORY.md
+
+run: ## Run scoville
+	scoville --help
+
+format: ## Rewrite the sources to canonical form
+	ruff format .
+
+analyze: ## Type-check the package
+	basedpyright

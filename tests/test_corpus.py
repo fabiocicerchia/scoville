@@ -19,8 +19,13 @@ INVENTORY = Path(__file__).parent.parent / "INVENTORY.md"
 RENDER = Path(__file__).parent / "render_inventory.py"
 
 
-def load():
-    rows, section = [], None
+# (section, expected level, command, line number in the corpus file)
+CorpusRow = tuple[str, str, str, int]
+
+
+def load() -> list[CorpusRow]:
+    rows: list[CorpusRow] = []
+    section = ""
     for n, line in enumerate(CORPUS.read_text().splitlines(), 1):
         if line.startswith("## "):
             section = line[3:].strip()
@@ -42,7 +47,7 @@ def test_corpus_is_well_formed() -> None:
 
 
 def test_no_duplicate_commands() -> None:
-    seen = {}
+    seen: dict[str, int] = {}
     for _, _, command, line in ROWS:
         assert command not in seen, f"{CORPUS}:{line}: duplicate of line {seen.get(command)}"
         seen[command] = line
@@ -57,10 +62,10 @@ def test_every_band_is_represented() -> None:
     ("expected", "command"),
     [pytest.param(e, c, id=f"{s}:{c}"[:90]) for s, e, c, _ in ROWS],
 )
-def test_corpus_command_scores_as_catalogued(expected, command) -> None:
+def test_corpus_command_scores_as_catalogued(expected: str, command: str) -> None:
     results = analyze(command)
     assert results, f"{command!r} produced no result"
-    worst = max(results, key=lambda r: r["score"])
+    worst = max(results, key=lambda r: int(r["score"]))
     assert worst["level"] == expected, (
         f"{command!r}\n  catalogued: {expected}\n  scored:     "
         f"{worst['level']} ({worst['score']}/100)\n  factors: "

@@ -26,4 +26,34 @@ scoville = "scoville:main"
 py-modules = ["scoville"]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
+
+[tool.ruff.lint]
+# The en dash is deliberate in the inventory table's headings.
+allowed-confusables = ["–"]
+select = [
+  "E", "W", "F", "I", "N", "UP", "ANN", "ASYNC", "S", "B", "A", "C4", "DTZ",
+  "T20", "PT", "RET", "SIM", "PTH", "ERA", "TD", "FIX", "PLR2004", "TRY", "PL", "RUF",
+]
+ignore = [
+  "ANN401",      # Any in *args/**kwargs — FC-GEN-016's comment rule covers it
+  "TRY003",      # long messages inline; FC-GEN-022 wants them descriptive
+]
+
+[tool.ruff.lint.flake8-annotations]
+mypy-init-return = true
+
+[tool.ruff.lint.per-file-ignores]
+# `assert` is what a test is, and an expected value is the literal it compares
+# against -- naming it moves the assertion one step from the thing asserted.
+"tests/**" = [
+  "S101",     # `assert` is what a test is
+  "PLR2004",  # an expected value is the literal it compares against
+  "ANN001",   # a fixture or a fake's argument, named by the test that builds it
+  "ANN201",   # a test helper's return is whatever the assertions read
+  "ANN202",
+  "S603",     # a test that runs this CLI is running this CLI
+  "ANN002",   # a fake's *args exist to swallow whatever the real call passes
+  "ANN003",   # ditto **kwargs
+  "ANN204",   # a fake's __call__ returns whatever the code under test reads
+]

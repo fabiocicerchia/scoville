@@ -40,30 +40,41 @@ def rows() -> Iterator[tuple[str, str, str]]:
             yield section, level.strip(), command.strip()
 
 
+HEADINGS = ("Level", "Command", "Scope", "Reversibility")
+
+
+def table(cells: list[tuple[str, ...]]) -> list[str]:
+    """A table markdownlint accepts: every pipe padded to the widest cell.
+
+    MD060's "aligned" style is what the repo's markdownlint config asks for, so
+    the generator has to emit it — otherwise regenerating the file reintroduces
+    the findings someone just fixed by hand.
+    """
+    rows_ = [HEADINGS, *cells]
+    width = [max(len(r[c]) for r in rows_) for c in range(len(HEADINGS))]
+    line = lambda r: "| " + " | ".join(r[c].ljust(width[c]) for c in range(len(HEADINGS))) + " |"  # noqa: E731
+    return [line(HEADINGS), "| " + " | ".join("-" * w for w in width) + " |", *(line(r) for r in cells)]
+
+
 def main() -> None:
-    out = [HEADER]
     counts: dict[str, int] = dict.fromkeys(LEVELS, 0)
     total = 0
-    body: list[str] = []
-    current: str | None = None
+    sections: list[tuple[str, list[tuple[str, ...]]]] = []
     for section, level, command in rows():
-        if section != current:
-            current = section
-            body.append(f"\n## {section}\n")
-            body.append("| Level | Command | Scope | Reversibility |")
-            body.append("|---|---|---|---|")
+        if not sections or sections[-1][0] != section:
+            sections.append((section, []))
         results = analyze(command)
         worst = max(results, key=lambda r: int(r["score"]))
         counts[level] += 1
         total += 1
         cmd = command.replace("|", "\\|")
-        body.append(f"| `{level}` {worst['score']} | `{cmd}` | {worst['scope']} | {worst['reversibility']} |")
+        sections[-1][1].append((f"`{level}` {worst['score']}", f"`{cmd}`", worst["scope"], worst["reversibility"]))
 
     summary = " · ".join(f"**{n}** {lvl}" for lvl, n in counts.items() if n)
-    out.append(f"{total} commands catalogued: {summary}.\n")
-    out.extend(body)
-    out.append("")
-    sys.stdout.write("\n".join(out))
+    out = [HEADER.rstrip("\n"), "", f"{total} commands catalogued: {summary}."]
+    for section, cells in sections:
+        out += ["", f"## {section}", "", *table(cells)]
+    sys.stdout.write("\n".join([*out, ""]))
 
 
 if __name__ == "__main__":

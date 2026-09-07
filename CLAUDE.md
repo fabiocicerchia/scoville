@@ -4,7 +4,7 @@ Guidance for Claude Code (and other AI agents) working in this repo.
 
 ## Project
 
-scoville is a single-file, zero-dependency Python 3.10+ CLI that scores the
+scoville is a zero-dependency Python 3.10+ CLI (the `scoville` package) that scores the
 risk of a shell command before it runs: a 0–100 score, a blast radius, a
 reversibility verdict and every factor that contributed. The tool is
 `scoville.py` (entry point `scoville:main`); the rule set is data inside that

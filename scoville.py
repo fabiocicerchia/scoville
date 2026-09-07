@@ -6460,7 +6460,7 @@ def main(  # noqa: PLR0911,PLR0912,PLR0915 — argument handling: one arm per fl
     source = None
     if args.file:
         try:
-            with Path(args.file, encoding="utf-8", errors="replace").open() as fh:
+            with Path(args.file).open(encoding="utf-8", errors="replace") as fh:
                 text = fh.read()
         except OSError as e:
             print(f"scoville: {e}", file=sys.stderr)  # noqa: T201 — the tool's output

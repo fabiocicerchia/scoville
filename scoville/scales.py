@@ -3,7 +3,7 @@ reversibility, and the three helpers that compare them."""
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+from typing import Any
 
 # ---------------------------------------------------------------- scales ---
 
@@ -59,5 +59,3 @@ def harder(a: str, b: str) -> str:
     """Return the less recoverable of two verdicts — reversibility only ever
     gets worse as factors accumulate."""
     return a if REVERT.index(a) >= REVERT.index(b) else b
-
-

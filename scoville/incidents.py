@@ -4,9 +4,6 @@ Data only, keyed by rule or amplifier id, validated by the suite."""
 
 from __future__ import annotations
 
-
-
-
 # The long form for a rule: the class of incident it exists to prevent.
 #
 # Keyed by rule or amplifier id and validated by the suite — an entry naming

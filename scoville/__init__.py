@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """scoville — risk posture for shell commands, before you run them.
 
 Risk is not a property of a binary, it is a property of
@@ -31,16 +30,39 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
 
-__version__ = "0.3.0"  # x-release-please-version
-
-from .scales import BANDS, Definition, Entry, Factor, FactorTuple, LEVELS, Override, REVERT, Result, SCOPES, band, harder, widest
-from .catalog import A, R
-from .rules import DESTROY_VERBS, FETCHERS, INTERPRETERS, READ_ONLY, READ_VERBS, RESOURCE_CLIS, RULES, SHELLS, WRITE_VERBS
-from .amplifiers import AMPS, CORE_DIRS, DAMPENERS, DEVICE_TARGET_EXPECTED, DRY_RUN_N_BINS, PATH_SENSITIVE, REGENERABLE, SOFTENERS, SYSTEM_DIRS
+from .amplifiers import (
+    AMPS,
+    CORE_DIRS,
+    DAMPENERS,
+    DEVICE_TARGET_EXPECTED,
+    DRY_RUN_N_BINS,
+    PATH_SENSITIVE,
+    REGENERABLE,
+    SOFTENERS,
+    SYSTEM_DIRS,
+)
+from .catalog import A as A
+from .catalog import R as R
 from .incidents import INCIDENTS
-from .catalog import _check
-from .rules import _LEAD, _READ
+from .rules import (
+    DESTROY_VERBS as DESTROY_VERBS,
+)
+from .rules import FETCHERS, INTERPRETERS, RESOURCE_CLIS, RULES, SHELLS
+from .rules import (
+    READ_ONLY as READ_ONLY,
+)
+from .rules import (
+    READ_VERBS as READ_VERBS,
+)
+from .rules import (
+    WRITE_VERBS as WRITE_VERBS,
+)
+from .scales import BANDS as BANDS
+from .scales import LEVELS, Definition, Entry, Factor, FactorTuple, Override, Result, band, harder, widest
+from .scales import REVERT as REVERT
+from .scales import SCOPES as SCOPES
 
+__version__ = "0.3.0"  # x-release-please-version
 
 
 def entry_by_id(rid: str) -> tuple[str | None, Entry | None]:
@@ -2324,4 +2346,3 @@ if __name__ == "__main__":
     except BrokenPipeError:  # `scoville … | head`
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
         sys.exit(0)
-

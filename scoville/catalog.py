@@ -10,7 +10,6 @@ import re
 from .scales import REVERT, SCOPES, Entry
 
 
-
 def _check(rid: str, scope: str | None, revert: str | None) -> None:
     """Refuse a rule that names a scope or reversibility nobody defined.
 
@@ -60,7 +59,6 @@ def R(  # noqa: N802,PLR0913,PLR0917 — the rule table's columns; see the comme
         "paths": paths,
         "subsumes": set(subsumes.split()),
     }
-
 
 
 def A(  # noqa: N802,PLR0913,PLR0917 — the amplifier table's columns; see above

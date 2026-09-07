@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from .catalog import R
 
-
-
 READ_ONLY = (
     "ls cat echo pwd whoami id date uname df du free ps top htop grep egrep fgrep awk head tail "
     "wc sort uniq which type file stat printenv hostname dig nslookup host whois ping traceroute "
@@ -2513,4 +2511,3 @@ FETCHERS = {
     "xz",
 }
 INTERPRETERS = SHELLS | {"python", "python3", "perl", "ruby", "node", "php"}
-

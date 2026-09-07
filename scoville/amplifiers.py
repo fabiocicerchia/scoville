@@ -7,8 +7,6 @@ import re
 
 from .catalog import A
 
-
-
 AMPS = [
     A(
         "RECURSIVE",
@@ -691,4 +689,3 @@ PATH_SENSITIVE = {
     "mkfs",
     "wipefs",
 }
-

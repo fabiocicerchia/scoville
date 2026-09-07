@@ -50,9 +50,12 @@ def table(cells: list[tuple[str, ...]]) -> list[str]:
     the generator has to emit it — otherwise regenerating the file reintroduces
     the findings someone just fixed by hand.
     """
-    rows_ = [HEADINGS, *cells]
-    width = [max(len(r[c]) for r in rows_) for c in range(len(HEADINGS))]
-    line = lambda r: "| " + " | ".join(r[c].ljust(width[c]) for c in range(len(HEADINGS))) + " |"  # noqa: E731
+    rows_: list[tuple[str, ...]] = [HEADINGS, *cells]
+    width: list[int] = [max(len(r[c]) for r in rows_) for c in range(len(HEADINGS))]
+
+    def line(row: tuple[str, ...]) -> str:
+        return "| " + " | ".join(row[c].ljust(width[c]) for c in range(len(HEADINGS))) + " |"
+
     return [line(HEADINGS), "| " + " | ".join("-" * w for w in width) + " |", *(line(r) for r in cells)]
 
 

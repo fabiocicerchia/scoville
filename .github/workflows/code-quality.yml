@@ -30,6 +30,11 @@ jobs:
           # bump, not something a release should make for us.
           version: v3.11.3
 
+      # The action above only downloads the binary and adds it to PATH;
+      # without this step nothing is ever checked.
+      - name: editorconfig
+        run: editorconfig-checker
+
       - name: actionlint
         uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7  # v2.2.0
         with:

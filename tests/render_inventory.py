@@ -7,6 +7,7 @@ assertion, everything else in the table is generated.
 """
 
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -29,8 +30,8 @@ it is to get back.
 """
 
 
-def rows():
-    section = None
+def rows() -> Iterator[tuple[str, str, str]]:
+    section = ""
     for line in CORPUS.read_text().splitlines():
         if line.startswith("## "):
             section = line[3:].strip()
@@ -39,11 +40,12 @@ def rows():
             yield section, level.strip(), command.strip()
 
 
-def main():
+def main() -> None:
     out = [HEADER]
-    counts = dict.fromkeys(LEVELS, 0)
+    counts: dict[str, int] = dict.fromkeys(LEVELS, 0)
     total = 0
-    body, current = [], None
+    body: list[str] = []
+    current: str | None = None
     for section, level, command in rows():
         if section != current:
             current = section
@@ -51,14 +53,11 @@ def main():
             body.append("| Level | Command | Scope | Reversibility |")
             body.append("|---|---|---|---|")
         results = analyze(command)
-        worst = max(results, key=lambda r: r["score"])
+        worst = max(results, key=lambda r: int(r["score"]))
         counts[level] += 1
         total += 1
         cmd = command.replace("|", "\\|")
-        body.append(
-            f"| `{level}` {worst['score']} | `{cmd}` | {worst['scope']} "
-            f"| {worst['reversibility']} |"
-        )
+        body.append(f"| `{level}` {worst['score']} | `{cmd}` | {worst['scope']} | {worst['reversibility']} |")
 
     summary = " · ".join(f"**{n}** {lvl}" for lvl, n in counts.items() if n)
     out.append(f"{total} commands catalogued: {summary}.\n")

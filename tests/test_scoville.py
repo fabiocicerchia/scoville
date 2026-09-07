@@ -1,6 +1,7 @@
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import pytest
 
@@ -9,6 +10,8 @@ from scoville import (
     INCIDENTS,
     RULES,
     ConfigError,
+    Override,
+    Result,
     analyze,
     apply_overrides,
     band,
@@ -26,17 +29,35 @@ from scoville import (
 )
 
 
-def one(cmd, **kw):
+def _fake_which(path: str | None) -> Callable[[str], str | None]:
+    """shutil.which, answering the same way whatever it is asked."""
+
+    def which(_name: str) -> str | None:
+        return path
+
+    return which
+
+
+def _fake_docker(out: str | None) -> Callable[..., str | None]:
+    """scoville._docker, with a canned inspect line."""
+
+    def docker(_args: list[str], _timeout: float = 5) -> str | None:
+        return out
+
+    return docker
+
+
+def one(cmd: str, **kw: Any) -> Result:
     results = analyze(cmd, **kw)
     assert results, f"no result for {cmd!r}"
     return max(results, key=lambda r: r["score"])
 
 
-def level(cmd, **kw):
+def level(cmd: str, **kw: Any) -> str:
     return one(cmd, **kw)["level"]
 
 
-def score(cmd, **kw):
+def score(cmd: str, **kw: Any) -> int:
     return one(cmd, **kw)["score"]
 
 
@@ -241,7 +262,7 @@ def test_unknown_command_is_low_unless_strict() -> None:
         (100, "critical"),
     ],
 )
-def test_bands(value, expected) -> None:
+def test_bands(value: int, expected: str) -> None:
     assert band(value) == expected
 
 
@@ -276,11 +297,11 @@ def test_list_rules(capsys: pytest.CaptureFixture[str]) -> None:
 
 def test_introspect_resolves_a_dangerous_entrypoint(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(scoville, "shutil", scoville.shutil)
-    monkeypatch.setattr(scoville.shutil, "which", lambda _: "/usr/bin/docker")
+    monkeypatch.setattr(scoville.shutil, "which", _fake_which("/usr/bin/docker"))
     monkeypatch.setattr(
         scoville,
         "_docker",
-        lambda args, timeout=5: '["/bin/sh","-c","rm -rf /data"]|null|root|sha256:x',
+        _fake_docker('["/bin/sh","-c","rm -rf /data"]|null|root|sha256:x'),
     )
     r = one("docker run acme/cleaner:1.0", introspect=True)
     assert r["level"] == "critical"
@@ -289,21 +310,21 @@ def test_introspect_resolves_a_dangerous_entrypoint(monkeypatch: pytest.MonkeyPa
 
 
 def test_introspect_reports_when_it_cannot_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(scoville.shutil, "which", lambda _: "/usr/bin/docker")
-    monkeypatch.setattr(scoville, "_docker", lambda args, timeout=5: None)
+    monkeypatch.setattr(scoville.shutil, "which", _fake_which("/usr/bin/docker"))
+    monkeypatch.setattr(scoville, "_docker", _fake_docker(None))
     r = one("docker run acme/cleaner:1.0", introspect=True)
     assert any("cannot inspect" in f["why"] for f in r["factors"])
     assert r["level"] == "medium"
 
 
 def test_introspect_without_docker_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(scoville.shutil, "which", lambda _: None)
+    monkeypatch.setattr(scoville.shutil, "which", _fake_which(None))
     r = one("docker run acme/cleaner:1.0", introspect=True)
     assert any("no docker CLI" in f["why"] for f in r["factors"])
 
 
 def test_introspection_is_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
-    def boom(*a, **k) -> NoReturn:
+    def boom(*_args: object, **_kwargs: object) -> NoReturn:
         raise AssertionError("scoville shelled out without --introspect")
 
     monkeypatch.setattr(scoville, "_docker", boom)
@@ -342,7 +363,7 @@ def test_quoted_command_text_is_not_treated_as_a_command() -> None:
         "openstack server delete web-1",
     ],
 )
-def test_destructive_verbs_across_cloud_clis(cmd) -> None:
+def test_destructive_verbs_across_cloud_clis(cmd: str) -> None:
     assert level(cmd) in ("high", "critical")
 
 
@@ -357,7 +378,7 @@ def test_destructive_verbs_across_cloud_clis(cmd) -> None:
         "velero backup describe daily-1",
     ],
 )
-def test_read_verbs_stay_free(cmd) -> None:
+def test_read_verbs_stay_free(cmd: str) -> None:
     assert level(cmd) == "safe"
 
 
@@ -505,7 +526,7 @@ def test_assume_no_is_the_mirror() -> None:
         "echo Zm9v | base64 -d | sh",
     ],
 )
-def test_remote_code_is_critical_however_it_is_spelled(cmd) -> None:
+def test_remote_code_is_critical_however_it_is_spelled(cmd: str) -> None:
     assert level(cmd) == "critical", cmd
 
 
@@ -527,7 +548,7 @@ def test_a_local_script_is_opaque_but_not_remote_code() -> None:
 
 
 @pytest.fixture
-def project(tmp_path: Path):
+def project(tmp_path: Path) -> str:
     (tmp_path / "foo.sh").write_text(
         '#!/usr/bin/env bash\nset -e\ncleanup() {\n  rm -rf "$BUILD_DIR"/\n}\n'
         "echo hi\nkubectl delete ns staging\ncleanup\n"
@@ -541,18 +562,18 @@ def project(tmp_path: Path):
     return str(tmp_path)
 
 
-def worst(cmd, **kw):
+def worst(cmd: str, **kw: Any) -> Result:
     results = analyze(cmd, **kw)
     return max(results, key=lambda r: r["score"])
 
 
-def test_a_wrapper_is_opaque_until_it_is_read(project) -> None:
+def test_a_wrapper_is_opaque_until_it_is_read(project: Path) -> None:
     r = worst("./foo.sh")
     assert r["level"] == "low"
     assert any("inside the script" in f["why"] for f in r["factors"])
 
 
-def test_introspect_reads_the_wrapper_and_names_the_line(project) -> None:
+def test_introspect_reads_the_wrapper_and_names_the_line(project: Path) -> None:
     r = worst("./foo.sh", introspect=True, basedir=project)
     assert r["level"] == "critical"
     factor = next(f for f in r["factors"] if "resolved wrapper" in f["why"])
@@ -560,20 +581,20 @@ def test_introspect_reads_the_wrapper_and_names_the_line(project) -> None:
     assert "line 4" in factor["why"]
 
 
-def test_reading_a_harmless_wrapper_lowers_the_score(project) -> None:
+def test_reading_a_harmless_wrapper_lowers_the_score(project: Path) -> None:
     # introspection resolves uncertainty in both directions
     assert worst("./safe.sh", introspect=True, basedir=project)["level"] == "safe"
     assert worst("./safe.sh", introspect=True, basedir=project)["score"] < worst("./safe.sh")["score"]
 
 
-def test_make_target_and_npm_script_are_resolved(project) -> None:
+def test_make_target_and_npm_script_are_resolved(project: Path) -> None:
     assert worst("make deploy", introspect=True, basedir=project)["level"] == "critical"
     assert worst("npm run reset-db", introspect=True, basedir=project)["level"] == "critical"
     # a target that does not exist cannot be read, and says so
     assert any("could not be read" in f["why"] for f in worst("make nope", introspect=True, basedir=project)["factors"])
 
 
-def test_a_self_referential_script_terminates(project) -> None:
+def test_a_self_referential_script_terminates(project: Path) -> None:
     assert worst("bash loop.sh", introspect=True, basedir=project)["level"] in ("low", "medium")
 
 
@@ -663,7 +684,7 @@ k delete ns prod
 """
 
 
-def line(text, needle, **kw):
+def line(text: str, needle: str, **kw: Any) -> Result:
     """The result for the command containing `needle`."""
     for r in analyze(text, **kw):
         if needle in r["command"]:
@@ -790,16 +811,16 @@ RC = {
 
 
 @pytest.fixture
-def rc(tmp_path: Path):
+def rc(tmp_path: Path) -> Path:
     (tmp_path / ".scovillerc").write_text(json.dumps(RC))
     return tmp_path
 
 
-def scored(command, entries):
+def scored(command: str, entries: list[Override]) -> Result:
     return apply_overrides(analyze(command), entries)[0]
 
 
-def test_config_is_discovered_from_the_directory_upwards(rc) -> None:
+def test_config_is_discovered_from_the_directory_upwards(rc: Path) -> None:
     deep = rc / "a" / "b"
     deep.mkdir(parents=True)
     # A repo-root config covers every subdirectory: risk is a property of the
@@ -808,7 +829,7 @@ def test_config_is_discovered_from_the_directory_upwards(rc) -> None:
     assert find_config(str(rc)) == str(rc / ".scovillerc")
 
 
-def test_allow_keeps_the_real_score_but_does_not_trip_the_gate(rc, capsys: pytest.CaptureFixture[str]) -> None:
+def test_allow_keeps_the_real_score_but_does_not_trip_the_gate(rc: Path, capsys: pytest.CaptureFixture[str]) -> None:
     entries = load_config(str(rc / ".scovillerc"))
     r = scored("kubectl delete ns ci-1234", entries)
     # Reporting it as safe would be a lie; the finding stays, with its score.
@@ -821,11 +842,11 @@ def test_allow_keeps_the_real_score_but_does_not_trip_the_gate(rc, capsys: pytes
     assert code == 0
 
 
-def test_an_unallowed_command_still_trips_the_gate(rc) -> None:
+def test_an_unallowed_command_still_trips_the_gate(rc: Path) -> None:
     assert main(["kubectl delete ns prod", "--fail-on", "high", "--config", str(rc / ".scovillerc")]) == 1
 
 
-def test_deny_forces_critical_whatever_the_command_scores(rc) -> None:
+def test_deny_forces_critical_whatever_the_command_scores(rc: Path) -> None:
     entries = load_config(str(rc / ".scovillerc"))
     # A read-only command, denied: the point is that it is never acceptable
     # here, not that it is dangerous.
@@ -851,7 +872,7 @@ def test_deny_beats_allow_when_both_match(tmp_path: Path) -> None:
     assert scored("rm notes.txt", entries)["override"]["action"] == "allow"
 
 
-def test_rescore_pins_the_band_and_says_what_moved(rc) -> None:
+def test_rescore_pins_the_band_and_says_what_moved(rc: Path) -> None:
     entries = load_config(str(rc / ".scovillerc"))
     r = scored("terraform apply", entries)
     assert r["level"] == "critical"
@@ -859,7 +880,7 @@ def test_rescore_pins_the_band_and_says_what_moved(rc) -> None:
     assert "shared state" in r["factors"][-1]["why"]
 
 
-def test_an_override_is_visible_in_json(rc, capsys: pytest.CaptureFixture[str]) -> None:
+def test_an_override_is_visible_in_json(rc: Path, capsys: pytest.CaptureFixture[str]) -> None:
     main(["terraform apply", "--format", "json", "--config", str(rc / ".scovillerc")])
     payload = json.loads(capsys.readouterr().out)
     override = payload["commands"][0]["override"]
@@ -880,7 +901,7 @@ def test_strict_does_not_defeat_an_allow(tmp_path: Path) -> None:
     assert main(["frobnicate the-thing", "--strict", "--fail-on", "medium"]) == 1
 
 
-def test_no_config_ignores_a_discovered_file(rc, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_config_ignores_a_discovered_file(rc: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(rc)
     assert main(["kubectl delete ns ci-1", "--fail-on", "high"]) == 0
     assert main(["kubectl delete ns ci-1", "--fail-on", "high", "--no-config"]) == 1
@@ -897,12 +918,13 @@ def test_every_override_must_state_a_reason(tmp_path: Path) -> None:
 
 def test_a_malformed_config_is_refused_not_guessed_at(tmp_path: Path) -> None:
     cfg = tmp_path / ".scovillerc"
-    for bad, msg in (
+    cases: list[tuple[object, str]] = [
         ({"rescore": [{"match": "x", "why": "y", "level": "nope"}]}, "must be one of"),
         ({"oops": []}, "unknown key"),
         ({"allow": [{"why": "no match"}]}, "needs a `match`"),
         ([], "expected an object"),
-    ):
+    ]
+    for bad, msg in cases:
         cfg.write_text(json.dumps(bad))
         with pytest.raises(ConfigError, match=msg):
             load_config(str(cfg))
@@ -920,7 +942,7 @@ def test_a_named_config_that_is_missing_is_an_error(tmp_path: Path) -> None:
 # --- promoted CLIs, and the floor underneath everything else ----------------
 
 
-def rule_id(cmd):
+def rule_id(cmd: str) -> str:
     return one(cmd)["rule"]
 
 
@@ -932,7 +954,7 @@ def test_the_promoted_clis_have_rules_of_their_own() -> None:
 
 
 @pytest.mark.parametrize("cli", ["hcloud", "doctl", "scw", "linode-cli", "wrangler", "pscale"])
-def test_verb_classification_still_carries_the_clis_nobody_promoted(cli) -> None:
+def test_verb_classification_still_carries_the_clis_nobody_promoted(cli: str) -> None:
     # The floor is the reason a gate is worth having on day one of a new CLI.
     # Promoting six of them must not quietly remove it from the other forty.
     assert cli in generic_clis()
@@ -1045,6 +1067,7 @@ def test_every_id_has_a_why_body() -> None:
 def test_a_rule_scoring_at_all_explains_its_band_and_its_alternative() -> None:
     for rid in [r["id"] for r in RULES if r["base"] >= 35]:
         body = why_text(rid)
+        assert body is not None, rid
         assert "WHY THIS BAND" in body, rid
         assert "SAFER" in body, rid
 
@@ -1054,7 +1077,9 @@ def test_the_derived_view_cannot_disagree_with_the_score() -> None:
     so the explanation and the scorer are the same facts. A view written by
     hand would drift the first time a base moved."""
     for r in RULES:
-        head = why_text(r["id"]).splitlines()[0]
+        body = why_text(r["id"])
+        assert body is not None, r["id"]
+        head = body.splitlines()[0]
         assert f"base {r['base']}" in head, r["id"]
         assert f"scope: {r['scope']}" in head, r["id"]
         assert r["revert"] in head, r["id"]
@@ -1064,10 +1089,12 @@ def test_a_rule_with_no_incident_note_says_so_rather_than_padding() -> None:
     missing = [r["id"] for r in RULES if r["id"] not in INCIDENTS]
     assert missing, "if every rule has a note, delete this test and celebrate"
     body = why_text(missing[0])
+    assert body is not None
     assert "Not written yet" in body
     # ...and still carries the one-line reason, so the view is never useless.
     entry = entry_by_id(missing[0])[1]
-    assert entry["why"].split(":")[0][:30] in body
+    assert entry is not None
+    assert str(entry["why"]).split(":")[0][:30] in body
 
 
 def test_incident_notes_cannot_name_a_rule_that_does_not_exist() -> None:
@@ -1095,8 +1122,12 @@ def test_why_accepts_an_amplifier_id_in_the_spelling_list_rules_prints() -> None
     came from."""
     assert why_text("+FORCE") == why_text("FORCE")
     assert why_text("force") == why_text("FORCE")
-    assert "amplifier" in why_text("FORCE")
-    assert "softener" in why_text("INTERACTIVE")
+    amplifier = why_text("FORCE")
+    softener = why_text("INTERACTIVE")
+    assert amplifier is not None
+    assert softener is not None
+    assert "amplifier" in amplifier
+    assert "softener" in softener
 
 
 def test_an_unknown_id_exits_64_and_suggests_a_near_miss(capsys: pytest.CaptureFixture[str]) -> None:
@@ -1157,19 +1188,20 @@ class FakeKubectl:
     """Stands in for the kubectl binary. `answers` maps a joined argv to stdout;
     anything not listed returns None, which is the "no answer" case."""
 
-    def __init__(self, answers) -> None:
+    def __init__(self, answers: dict[str, str]) -> None:
         self.answers = answers
-        self.calls = []
+        self.calls: list[str] = []
+        self.timeout: int = 0
 
-    def __call__(self, binary, args, timeout):
+    def __call__(self, binary: str, args: list[str], timeout: int) -> str | None:
         self.calls.append(" ".join(args))
         self.timeout = timeout
         return self.answers.get(" ".join(args))
 
 
 @pytest.fixture
-def kubectl(monkeypatch: pytest.MonkeyPatch):
-    def install(answers):
+def kubectl(monkeypatch: pytest.MonkeyPatch) -> Callable[[dict[str, str]], FakeKubectl]:
+    def install(answers: dict[str, str]) -> FakeKubectl:
         fake = FakeKubectl(answers)
         monkeypatch.setattr(scoville, "_kubectl", fake)
         return fake
@@ -1180,13 +1212,15 @@ def kubectl(monkeypatch: pytest.MonkeyPatch):
 CTX = {"config current-context": "prod-readonly"}
 
 
-def test_the_default_path_never_talks_to_a_cluster(kubectl) -> None:
+def test_the_default_path_never_talks_to_a_cluster(kubectl: Callable[[dict[str, str]], FakeKubectl]) -> None:
     fake = kubectl({**CTX, "auth can-i delete namespaces": "yes"})
     one("kubectl delete ns prod")  # no --introspect
     assert fake.calls == [], "scoring a kubectl line made a cluster call by default"
 
 
-def test_a_command_the_context_cannot_run_is_dampened_and_says_so(kubectl) -> None:
+def test_a_command_the_context_cannot_run_is_dampened_and_says_so(
+    kubectl: Callable[[dict[str, str]], FakeKubectl],
+) -> None:
     kubectl({**CTX, "auth can-i delete namespaces -n prod": "no"})
     loud = one("kubectl delete ns prod -n prod")
     quiet = one("kubectl delete ns prod -n prod", introspect=True)
@@ -1198,13 +1232,13 @@ def test_a_command_the_context_cannot_run_is_dampened_and_says_so(kubectl) -> No
     assert "can-i" in why
 
 
-def test_a_refusal_scores_down_but_never_to_nothing(kubectl) -> None:
+def test_a_refusal_scores_down_but_never_to_nothing(kubectl: Callable[[dict[str, str]], FakeKubectl]) -> None:
     kubectl({**CTX, "auth can-i delete namespaces": "no"})
     r = one("kubectl delete ns prod", introspect=True)
     assert r["score"] > 0, "a refusal erased the command instead of discounting it"
 
 
-def test_cluster_admin_is_an_amplifier_on_a_destructive_verb(kubectl) -> None:
+def test_cluster_admin_is_an_amplifier_on_a_destructive_verb(kubectl: Callable[[dict[str, str]], FakeKubectl]) -> None:
     kubectl(
         {
             "config current-context": "kind-kind",
@@ -1219,7 +1253,7 @@ def test_cluster_admin_is_an_amplifier_on_a_destructive_verb(kubectl) -> None:
     assert "cluster-admin" in " ".join(f["why"] for f in admin["factors"])
 
 
-def test_permitted_but_not_admin_changes_nothing_and_says_why(kubectl) -> None:
+def test_permitted_but_not_admin_changes_nothing_and_says_why(kubectl: Callable[[dict[str, str]], FakeKubectl]) -> None:
     kubectl(
         {
             "config current-context": "team-ns",
@@ -1246,7 +1280,7 @@ def test_permitted_but_not_admin_changes_nothing_and_says_why(kubectl) -> None:
         {**CTX, "auth can-i delete namespaces": "maybe"},
     ],
 )
-def test_no_answer_never_dampens(kubectl, answers) -> None:
+def test_no_answer_never_dampens(kubectl: Callable[[dict[str, str]], FakeKubectl], answers: dict[str, str]) -> None:
     """A dampener that fires on a bad result under-reports risk, which is the
     one kind of wrong answer this tool must not give."""
     kubectl(answers)
@@ -1255,7 +1289,7 @@ def test_no_answer_never_dampens(kubectl, answers) -> None:
     assert quiet["score"] >= plain["score"], f"{answers} produced a dampener"
 
 
-def test_an_unanswered_check_is_still_recorded_in_the_trace(kubectl) -> None:
+def test_an_unanswered_check_is_still_recorded_in_the_trace(kubectl: Callable[[dict[str, str]], FakeKubectl]) -> None:
     kubectl({**CTX})
     r = one("kubectl delete ns prod", introspect=True)
     why = " ".join(f["why"] for f in r["factors"])
@@ -1263,7 +1297,7 @@ def test_an_unanswered_check_is_still_recorded_in_the_trace(kubectl) -> None:
     assert "prod-readonly" in why
 
 
-def test_the_timeout_is_bounded_and_configurable(kubectl) -> None:
+def test_the_timeout_is_bounded_and_configurable(kubectl: Callable[[dict[str, str]], FakeKubectl]) -> None:
     fake = kubectl({**CTX, "auth can-i delete namespaces": "no"})
     analyze("kubectl delete ns prod", introspect=True, kube_timeout=0.25)
     assert fake.timeout == 0.25
@@ -1285,7 +1319,9 @@ def test_the_timeout_is_bounded_and_configurable(kubectl) -> None:
         ("", (None, None, None)),
     ],
 )
-def test_the_verb_and_resource_come_from_the_positionals(cmd, want) -> None:
+def test_the_verb_and_resource_come_from_the_positionals(
+    cmd: str, want: tuple[str | None, str | None, str | None]
+) -> None:
     assert kube_target(cmd.split()) == want
 
 
@@ -1295,7 +1331,7 @@ def test_a_flag_value_is_not_mistaken_for_the_resource() -> None:
     assert kube_target(["delete", "-l", "app=x", "pods"]) == ("delete", "pods", None)
 
 
-def test_kubectl_verbs_are_mapped_to_the_rbac_verbs_they_need(kubectl) -> None:
+def test_kubectl_verbs_are_mapped_to_the_rbac_verbs_they_need(kubectl: Callable[[dict[str, str]], FakeKubectl]) -> None:
     # `apply` is not an RBAC verb; asking for it gets a useless answer.
     fake = kubectl(
         {
@@ -1308,7 +1344,9 @@ def test_kubectl_verbs_are_mapped_to_the_rbac_verbs_they_need(kubectl) -> None:
     assert "auth can-i patch deployments" in fake.calls
 
 
-def test_a_short_resource_name_is_expanded_before_it_is_asked_about(kubectl) -> None:
+def test_a_short_resource_name_is_expanded_before_it_is_asked_about(
+    kubectl: Callable[[dict[str, str]], FakeKubectl],
+) -> None:
     fake = kubectl(
         {
             "config current-context": "c",
@@ -1320,7 +1358,7 @@ def test_a_short_resource_name_is_expanded_before_it_is_asked_about(kubectl) -> 
     assert "auth can-i delete namespaces" in fake.calls
 
 
-def test_an_unknown_resource_is_passed_through_verbatim(kubectl) -> None:
+def test_an_unknown_resource_is_passed_through_verbatim(kubectl: Callable[[dict[str, str]], FakeKubectl]) -> None:
     # The RBAC resource list is open — a CRD defines its own — so this code
     # must not be the thing that decides what exists.
     fake = kubectl({"config current-context": "c", "auth can-i delete widgets.example.com": "no"})
@@ -1329,7 +1367,7 @@ def test_an_unknown_resource_is_passed_through_verbatim(kubectl) -> None:
     assert "cannot delete widgets.example.com" in " ".join(f["why"] for f in r["factors"])
 
 
-def test_only_kubectl_lines_are_checked(kubectl) -> None:
+def test_only_kubectl_lines_are_checked(kubectl: Callable[[dict[str, str]], FakeKubectl]) -> None:
     fake = kubectl({**CTX})
     one("rm -rf /etc", introspect=True)
     one("docker rm -f web", introspect=True)

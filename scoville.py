@@ -27,9 +27,9 @@ import shutil
 import subprocess
 import sys
 import textwrap
-from collections.abc import Iterable
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 __version__ = "0.3.0"  # x-release-please-version
 
@@ -43,10 +43,19 @@ __version__ = "0.3.0"  # x-release-please-version
 # attribute that may not be there.
 Entry = dict[str, Any]
 Result = dict[str, Any]
+# One function or alias definition found in the text being scored:
+# {kind, name, value, at, line}.
+Definition = dict[str, Any]
 # One factor line under a result: what matched, and what it did to the score.
 Factor = dict[str, Any]
+# A factor as the scanners emit it, before it becomes a Factor dict: the
+# points, why, the scope and reversibility it implies, and -- when it came
+# from a named rule or amplifier -- that id.
+FactorTuple = tuple[int, str, str | None, str | None] | tuple[int, str, str | None, str | None, str]
 # A parsed config file (--config), or the defaults.
-Config = dict[str, Any]
+# One entry from a .scovillerc: {action, match, why, source} and, for a
+# rescore, the level it forces.
+Override = dict[str, Any]
 
 BANDS = ((85, "critical"), (60, "high"), (35, "medium"), (15, "low"), (0, "safe"))
 LEVELS = ("safe", "low", "medium", "high", "critical")
@@ -99,8 +108,11 @@ def _check(rid: str, scope: str | None, revert: str | None) -> None:
 
 def R(  # noqa: N802,PLR0913,PLR0917 — the rule table's columns; see the comment above
     rid: str,
-    bins: list[str],
-    sub: str,
+    # Space-separated, because that is how the table below reads: one string
+    # per rule rather than a list literal per row. `.split()` happens once,
+    # here.
+    bins: str,
+    sub: str | None,
     base: int,
     scope: str | None,
     revert: str | None,
@@ -2642,7 +2654,9 @@ INTERPRETERS = SHELLS | {"python", "python3", "perl", "ruby", "node", "php"}
 
 def A(  # noqa: N802,PLR0913,PLR0917 — the amplifier table's columns; see above
     aid: str,
-    bins: list[str],
+    # Space-separated like R's, and None for an amplifier that applies to any
+    # command rather than to a named set.
+    bins: str | None,
     pattern: str,
     points: int,
     why: str,
@@ -4277,7 +4291,7 @@ def _wrap(text: str, indent: str = "  ", width: int = 78, hang: str = "") -> str
     return textwrap.fill(text, width=width, initial_indent=indent, subsequent_indent=indent + hang)
 
 
-def _reachable(entry: Entry, kind: str) -> list[Entry]:
+def _reachable(entry: Entry, kind: str) -> tuple[list[Entry], list[Entry]]:
     """The amplifiers and softeners that can apply to this rule's binaries.
 
     Answers "why this band" with the range the rule can actually reach rather
@@ -4296,9 +4310,10 @@ def _reachable(entry: Entry, kind: str) -> list[Entry]:
     return amps, softs
 
 
-def _related(entry: Entry) -> list[str]:
+def _related(entry: Entry) -> tuple[list[Entry], list[Entry]]:
     """Other rules on the same binaries, and the generic ones this beats."""
-    same, beats = [], []
+    same: list[Entry] = []
+    beats: list[Entry] = []
     for r in RULES:
         if r["id"] == entry["id"] or not (r["bins"] & entry["bins"]):
             continue
@@ -4436,7 +4451,7 @@ def _why_related(entry: Entry) -> list[str]:
     return [*out, ""]
 
 
-def why_text(rid: str, width: int = 78) -> str:
+def why_text(rid: str, width: int = 78) -> str | None:
     """The long form for one rule or amplifier, or None if the id is unknown.
 
     Assembled from the rule table rather than written out twice: the band, the
@@ -4449,7 +4464,7 @@ def why_text(rid: str, width: int = 78) -> str:
     changed without the whole view in your head.
     """
     kind, entry = entry_by_id(rid)
-    if not entry:
+    if kind is None or entry is None:
         return None
     out = _why_head(kind, entry, width) + _why_matches(kind, entry) + _why_incident(entry)
     if kind == "rule":
@@ -4465,18 +4480,20 @@ OPS = ("&&", "||", ";;", "|&")
 
 def split_commands(  # noqa: PLR0912,PLR0915 — one pass over shell syntax; the branches are the grammar
     text: str,
-) -> Iterable[tuple[int, str]]:
+) -> list[tuple[str, int, str | None]]:
     """Split a shell snippet into (raw_command, offset, preceding_operator).
 
     Quote-, escape-, comment- and $()-aware. Not a shell grammar: it is a
     splitter good enough to find where one command ends and the next begins.
     """
-    out, buf = [], []
+    # (command, offset, the operator that preceded it -- None for the first).
+    out: list[tuple[str, int, str | None]] = []
+    buf: list[str] = []
     start, i, n, depth = 0, 0, len(text), 0
-    prev_op = None
-    quote = None
+    prev_op: str | None = None
+    quote: str | None = None
 
-    def flush(op: str, end: int) -> None:
+    def flush(op: str | None, end: int) -> None:
         nonlocal buf, start, prev_op
         raw = "".join(buf).strip()
         # drop grouping characters left dangling by the split, never a balanced pair
@@ -4545,15 +4562,19 @@ def split_commands(  # noqa: PLR0912,PLR0915 — one pass over shell syntax; the
 SUBSHELL = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
 
 
-def subshell_commands(raw: bool, offset: int) -> list[str]:
-    """Command substitutions run *first* and are easy to miss when skimming."""
+def subshell_commands(raw: str, offset: int) -> Iterator[tuple[str, int]]:
+    """Command substitutions run *first* and are easy to miss when skimming.
+
+    Yields (command, offset) so a finding can point at where in the line it
+    came from.
+    """
     for m in SUBSHELL.finditer(raw):
         inner = m.group(1) or m.group(2) or ""
         if inner.strip():
             yield inner.strip(), offset + m.start()
 
 
-def tokenize(raw: bool) -> list[str]:
+def tokenize(raw: str) -> list[str]:
     """Split a command into tokens, whitespace-splitting when shlex refuses.
 
     An unbalanced quote is a broken command, not a reason to score nothing:
@@ -4595,7 +4616,8 @@ WRAPPER_VALUE_FLAGS = {"-u", "-g", "-n", "-I", "-P", "-L", "-a", "-s", "-p", "--
 
 def strip_prefix(tokens: list[str]) -> tuple[list[str], bool, list[str]]:
     """Peel env assignments and wrappers to reach the command that matters."""
-    i, privileged, wrappers = 0, False, []
+    i, privileged = 0, False
+    wrappers: list[str] = []
     while i < len(tokens):
         t = tokens[i]
         if ENV_ASSIGN.match(t):
@@ -4712,7 +4734,7 @@ def _skip_flags(tokens: list[str], value_flags: set[str]) -> int:
 
 def carried_command(  # noqa: PLR0911,PLR0912 — one arm per wrapper this understands
     binary: str, args: list[str]
-) -> tuple[str | None, str | None, list[str] | None]:
+) -> tuple[list[str] | None, str | None, str | None]:
     """Return (payload_tokens, context, target) for commands that carry another.
 
     context drives how the payload's score is folded in; target is the
@@ -4796,7 +4818,7 @@ CONTEXTS = {
 # ---------------------------------------------------------- introspection ---
 
 
-def _docker(args: list[str], timeout: int = 5) -> str | None:
+def _docker(args: list[str], timeout: float = 5) -> str | None:
     """Run one read-only `docker` subcommand and return its stdout, or None.
 
     Nothing is ever executed to score it: this only ever inspects. A missing
@@ -4904,7 +4926,7 @@ CARRIER_ALIAS = "resolved alias "
 CARRIER_FUNCTION = "resolved function "
 
 
-def _balanced_body(text: str, brace_at: int) -> str:
+def _balanced_body(text: str, brace_at: int) -> str | None:
     """Text between the `{` at `brace_at` and its matching `}`, or None.
 
     Brace counting, not a regex: a function body containing `${VAR}` or a
@@ -4922,14 +4944,14 @@ def _balanced_body(text: str, brace_at: int) -> str:
     return None
 
 
-def collect_definitions(text: str) -> dict[str, str]:
+def collect_definitions(text: str) -> list[Definition]:
     """Functions and aliases defined in `text`, each with the offset it goes live.
 
     Nothing outside `text` is read. Resolving the user's `~/.bashrc` would make
     the same script score differently on two machines, which is a worse answer
     than an unknown command — the score has to be a property of the input.
     """
-    defs = []
+    defs: list[Definition] = []
     for m in ALIAS_DEF.finditer(text):
         val = m.group("val")
         if val[:1] in "'\"":
@@ -4964,7 +4986,7 @@ def collect_definitions(text: str) -> dict[str, str]:
     return defs
 
 
-def definition_at(defs: dict[str, str] | None, name: str, offset: int) -> str | None:
+def definition_at(defs: list[Definition] | None, name: str, offset: int) -> Definition | None:
     """The definition of `name` in scope at `offset`, or None.
 
     The last definition before the call site wins — that is what redefinition
@@ -4973,8 +4995,8 @@ def definition_at(defs: dict[str, str] | None, name: str, offset: int) -> str | 
     to bottom, and scoring it anyway would be a false positive on the common
     layout of helpers at the bottom of a script.
     """
-    found = None
-    for d in defs:
+    found: Definition | None = None
+    for d in defs or []:
         if d["name"] == name and d["at"] <= offset:
             found = d
     return found
@@ -5087,7 +5109,7 @@ KUBE_VALUE_FLAGS = {
 }
 
 
-def _kubectl(binary: str, args: list[str], timeout: int) -> str | None:
+def _kubectl(binary: str, args: list[str], timeout: float) -> str | None:
     """Run one read-only kubectl subcommand and return stdout, or None.
 
     Same collapse as _docker: a missing binary, a timeout, a non-zero exit and
@@ -5115,8 +5137,10 @@ def kube_target(args: list[str]) -> tuple[str | None, str | None, str | None]:
     Positional-only: the first two non-flag tokens. Enough for the commands
     worth scoring, and it declines rather than guesses on anything else.
     """
-    verb = resource = namespace = None
-    positional = []
+    verb: str | None = None
+    resource: str | None = None
+    namespace: str | None = None
+    positional: list[str] = []
     skip = False
     for i, a in enumerate(args):
         if skip:
@@ -5145,7 +5169,7 @@ def kube_target(args: list[str]) -> tuple[str | None, str | None, str | None]:
     return verb, resource, namespace
 
 
-def kube_context(binary: str, timeout: int) -> str | None:
+def kube_context(binary: str, timeout: float) -> str | None:
     """The context name `can-i` will be answered by, or None.
 
     A local kubeconfig read, not a cluster call — but if there is no context
@@ -5155,7 +5179,7 @@ def kube_context(binary: str, timeout: int) -> str | None:
     return out or None
 
 
-def kube_can_i(binary: str, verb: str, resource: str, namespace: str | None, timeout: int) -> bool | None:
+def kube_can_i(binary: str, verb: str, resource: str, namespace: str | None, timeout: float) -> bool | None:
     """True / False / None for "may this context do that".
 
     None is not a third state to act on — it is the absence of an answer, and
@@ -5175,7 +5199,7 @@ def kube_can_i(binary: str, verb: str, resource: str, namespace: str | None, tim
     return None
 
 
-def kube_rbac_factors(binary: str, args: list[str], timeout: int = KUBE_TIMEOUT_DEFAULT) -> list[tuple[int, str]]:
+def kube_rbac_factors(binary: str, args: list[str], timeout: float = KUBE_TIMEOUT_DEFAULT) -> list[FactorTuple]:
     """Fold the cluster's own answer in as scoring factors.
 
     Returns a list of factor tuples. Empty means "nothing to say", which is
@@ -5253,9 +5277,9 @@ def kube_rbac_factors(binary: str, args: list[str], timeout: int = KUBE_TIMEOUT_
     ]
 
 
-def path_factors(binary: str, args: list[str]) -> list[tuple[int, str]]:
+def path_factors(binary: str, args: list[str]) -> list[FactorTuple]:
     """Score the *targets*. This is where rm and `rm /` part ways."""
-    out = []
+    out: list[FactorTuple] = []
     for a in args:
         if a.startswith("-") or ENV_ASSIGN.match(a) or "=" in a.split("/", 1)[0]:
             continue
@@ -5358,8 +5382,8 @@ def pick_rule(binary: str, args_str: str) -> Entry | None:
 
 
 def _score_local_definition(  # noqa: PLR0913,PLR0917 — the scorer's whole context, passed down one level
-    local: str,
-    raw: bool,
+    local: Definition,
+    raw: str,
     binary: str,
     args: list[str],
     privileged: bool,
@@ -5367,8 +5391,8 @@ def _score_local_definition(  # noqa: PLR0913,PLR0917 — the scorer's whole con
     introspect: bool,
     depth: int,
     basedir: str,
-    seen: set[str],
-    defs: dict[str, str] | None,
+    seen: set[str] | None,
+    defs: list[Definition] | None,
     offset: int,
 ) -> Result | None:
     """Score a call to a function or alias defined earlier in the same input.
@@ -5442,8 +5466,11 @@ def _score_local_definition(  # noqa: PLR0913,PLR0917 — the scorer's whole con
         ]
         return result
 
-    factors = [{"points": 0, "why": f"`{binary}` is a function {site}", "rule": None, "keep": True}]
-    scope, revert, advice, children = "none", "reversible", None, []
+    factors: list[Factor] = [{"points": 0, "why": f"`{binary}` is a function {site}", "rule": None, "keep": True}]
+    scope: str | None = "none"
+    revert: str | None = "reversible"
+    advice: str | None = None
+    children: list[Result] = []
     seen.add(key)
     try:
         inner = analyze(
@@ -5461,7 +5488,7 @@ def _score_local_definition(  # noqa: PLR0913,PLR0917 — the scorer's whole con
         # script is ordinary, and a visited-set would report the second call as
         # recursion and score it zero.
         seen.discard(key)
-    worst = max(inner, key=lambda r: r["score"], default=None)
+    worst: Result | None = max(inner, key=lambda r: int(r["score"]), default=None)
     if worst and worst["score"]:
         children.append(worst)
         factors.append(
@@ -5473,7 +5500,7 @@ def _score_local_definition(  # noqa: PLR0913,PLR0917 — the scorer's whole con
             }
         )
         scope, revert, advice = worst["scope"], worst["reversibility"], worst["advice"]
-    score = max(0, min(100, sum(f["points"] for f in factors)))
+    score = max(0, min(100, sum(int(f["points"]) for f in factors)))
     return {
         "command": raw.strip(),
         "rule": "CARRIER-FUNCTION",
@@ -5489,7 +5516,7 @@ def _score_local_definition(  # noqa: PLR0913,PLR0917 — the scorer's whole con
     }
 
 
-def _factor(f: Factor) -> Factor:
+def _factor(f: FactorTuple) -> Factor:
     """One contributing factor, as it appears in output.
 
     `rule` names the rule or amplifier that produced it, so `scoville --why
@@ -5501,24 +5528,31 @@ def _factor(f: Factor) -> Factor:
     return {
         "points": points,
         "why": why,
-        "rule": f[FACTOR_RULE_INDEX] if len(f) > FACTOR_RULE_INDEX else None,
+        # The five-field form carries the id of the rule it came from; the
+        # four-field form is a path, a payload or a dampener, which has none.
+        "rule": tuple(f)[FACTOR_RULE_INDEX] if len(f) > FACTOR_RULE_INDEX else None,
         "keep": why.startswith((PAYLOAD, ENTRYPOINT, WRAPPER)),
     }
 
 
 def score_command(  # noqa: PLR0912,PLR0913,PLR0915,PLR0917 — the decision table this tool exists to be
-    raw: bool,
+    raw: str,
     tokens: list[str],
     strict: bool = False,
     introspect: bool = False,
     depth: int = 0,
     basedir: str = ".",
     seen: set[str] | None = None,
-    defs: dict[str, str] | None = None,
+    defs: list[Definition] | None = None,
     offset: int = 0,
-    kube_timeout: int = KUBE_TIMEOUT_DEFAULT,
-) -> Result:
-    """Score one command. Returns a result dict; recurses into payloads."""
+    kube_timeout: float = KUBE_TIMEOUT_DEFAULT,
+) -> Result | None:
+    """Score one command, or None when there is no command left to score.
+
+    A line that is only wrappers and environment assignments -- `sudo` on its
+    own, `FOO=bar` -- reaches here with nothing to name, and there is no score
+    to give it.
+    """
     rest, privileged, wrappers = strip_prefix(tokens)
     if not rest:
         return None
@@ -5569,7 +5603,7 @@ def score_command(  # noqa: PLR0912,PLR0913,PLR0915,PLR0917 — the decision tab
             return resolved
 
     rule = pick_rule(binary, args_str)
-    factors = []
+    factors: list[FactorTuple] = []
     if rule:
         scope, revert, advice = rule["scope"], rule["revert"], rule["advice"]
         if rule["base"]:
@@ -5600,7 +5634,7 @@ def score_command(  # noqa: PLR0912,PLR0913,PLR0915,PLR0917 — the decision tab
                 )
             )
 
-    subsumed = rule["subsumes"] if rule else set()
+    subsumed: set[str] = rule["subsumes"] if rule else set()
     for amp in AMPS + SOFTENERS:
         if amp["bins"] and binary not in amp["bins"]:
             continue
@@ -5618,7 +5652,7 @@ def score_command(  # noqa: PLR0912,PLR0913,PLR0915,PLR0917 — the decision tab
 
     # payload: docker exec / kubectl exec -- / ssh host / sh -c / ansible -a / find -exec
     payload, ctx, target = carried_command(binary, args)
-    children = []
+    children: list[Result] = []
     if ctx and depth < MAX_CARRIER_DEPTH:
         weight, scope_floor, note = CONTEXTS[ctx]
         if payload:
@@ -5706,7 +5740,7 @@ def score_command(  # noqa: PLR0912,PLR0913,PLR0915,PLR0917 — the decision tab
                 _depth=depth + 1,
                 _seen=seen,
             )
-            worst = max(inner, key=lambda r: r["score"], default=None)
+            worst: Result | None = max(inner, key=lambda r: int(r["score"]), default=None)
             if worst and worst["score"]:
                 children.append(worst)
                 factors.append(
@@ -5841,11 +5875,14 @@ def _make_recipe(target: str | None, basedir: str) -> str | None:
     expansion and no includes: what it cannot resolve it leaves alone rather
     than guessing at a command that was never going to run.
     """
+    if target is None:
+        return None
     for name in ("Makefile", "makefile", "GNUmakefile"):
         text = _read(name, basedir)
         if text is None:
             continue
-        lines, collecting = [], False
+        lines: list[str] = []
+        collecting = False
         for line in text.splitlines():
             if re.match(rf"^{re.escape(target)}\s*:(?!=)", line):
                 collecting = True
@@ -5895,7 +5932,7 @@ WRAPPER_NOTE = {
 FORKBOMB = re.compile(r":\s*\(\s*\)\s*\{.*\|.*&.*\}\s*;\s*:")
 
 
-def _track_downloads(raw: bool, downloaded: set[str]) -> None:
+def _track_downloads(raw: str, downloaded: set[str]) -> None:
     """Remember paths a fetcher wrote, so executing them later can be spotted."""
     tokens = tokenize(raw)
     rest, _, _ = strip_prefix(tokens)
@@ -5908,7 +5945,7 @@ def _track_downloads(raw: bool, downloaded: set[str]) -> None:
             downloaded.add(tok.split("=", 1)[1])
 
 
-def _flag_deferred_exec(result: Result, raw: bool, downloaded: set[str]) -> None:
+def _flag_deferred_exec(result: Result, raw: str, downloaded: set[str]) -> None:
     """`curl -o f URL && bash f` is the pipe with a file in the middle."""
     if not downloaded:
         return
@@ -5952,9 +5989,9 @@ def analyze(
     basedir: str = ".",
     _depth: int = 0,
     _seen: set[str] | None = None,
-    _defs: dict[str, str] | None = None,
+    _defs: list[Definition] | None = None,
     _at: int | None = None,
-    kube_timeout: int = KUBE_TIMEOUT_DEFAULT,
+    kube_timeout: float = KUBE_TIMEOUT_DEFAULT,
 ) -> list[Result]:
     """Analyze a snippet; returns one result per command, in execution order.
 
@@ -5965,7 +6002,7 @@ def analyze(
     point because bash resolves a name when the line runs, so a helper defined
     below the one that calls it is still in scope.
     """
-    results = []
+    results: list[Result] = []
     defs = _defs if _defs is not None else (collect_definitions(text) if introspect else [])
     if FORKBOMB.search(text):
         results.append(
@@ -5991,7 +6028,8 @@ def analyze(
         )
         return results
 
-    prev, downloaded = None, set()
+    prev: Result | None = None
+    downloaded: set[str] = set()
     for raw, offset, op in split_commands(text):
         line = text.count("\n", 0, offset) + 1
         for inner, ioff in subshell_commands(raw, offset):
@@ -6093,7 +6131,7 @@ def render_text(
     scored 0 — a safe command with nothing listed under it reads as a tool
     that failed to run, rather than as a verdict.
     """
-    lines = []
+    lines: list[str] = []
     width = 10 if scale == "bands" else 25
     for r in results:
         where = f"{source}:{r['line']}: " if source else ""
@@ -6126,7 +6164,7 @@ def render_text(
 
 def public(results: list[Result]) -> list[Result]:
     """Drop internal render hints before serialising."""
-    out = []
+    out: list[Result] = []
     for r in results:
         clean = {k: v for k, v in r.items() if k != "carries"}
         clean["factors"] = [{k: v for k, v in f.items() if k != "keep"} for f in r["factors"]]
@@ -6204,7 +6242,7 @@ def find_config(basedir: str) -> str | None:
         here = parent
 
 
-def load_config(path: str) -> Config:
+def load_config(path: str) -> list[Override]:
     """Parse and validate a config file into a list of override entries.
 
     JSON, not TOML. `tomllib` is 3.11+ and scoville supports 3.10, and the two
@@ -6222,24 +6260,28 @@ def load_config(path: str) -> Config:
         raise ConfigError(f"{path}: not valid JSON: {e}") from e
     if not isinstance(data, dict):
         raise ConfigError(f"{path}: expected an object with allow/deny/rescore keys")
+    # json.load only ever produces str keys; the cast says what it cannot.
+    config = cast("dict[str, Any]", data)
 
-    unknown = set(data) - set(OVERRIDE_ACTIONS)
+    unknown = set(config) - set(OVERRIDE_ACTIONS)
     if unknown:
         raise ConfigError(
             f"{path}: unknown key(s) {', '.join(sorted(unknown))}; expected {', '.join(OVERRIDE_ACTIONS)}"
         )
 
-    entries = []
+    entries: list[Override] = []
     # Deny first, then rescore, then allow: a deny is a statement that the
     # command is never acceptable here, and it has to survive an allow written
     # by someone who did not know about it.
     for action in OVERRIDE_ACTIONS:
-        for i, raw in enumerate(data.get(action) or []):
+        rules: list[Any] = config.get(action) or []
+        for i, raw in enumerate(rules):
             where = f"{path}: {action}[{i}]"
             if not isinstance(raw, dict):
                 raise ConfigError(f"{where}: expected an object with `match` and `why`")
-            match = raw.get("match")
-            why = raw.get("why")
+            rule = cast("dict[str, Any]", raw)
+            match = rule.get("match")
+            why = rule.get("why")
             if not match or not isinstance(match, str):
                 raise ConfigError(f"{where}: needs a `match` glob")
             # An override with no stated reason is how a config file becomes a
@@ -6248,9 +6290,9 @@ def load_config(path: str) -> Config:
                 raise ConfigError(
                     f"{where}: needs a `why` — an unexplained override is one nobody can safely remove later"
                 )
-            entry = {"action": action, "match": match, "why": why, "source": path}
+            entry: Override = {"action": action, "match": match, "why": why, "source": path}
             if action == "rescore":
-                level = raw.get("level")
+                level = rule.get("level")
                 if level not in LEVELS:
                     raise ConfigError(f"{where}: `level` must be one of {', '.join(LEVELS)}, got {level!r}")
                 entry["level"] = level
@@ -6309,7 +6351,12 @@ SCORE_FOR_LEVEL = {"safe": 0, "low": 15, "medium": 35, "high": 60, "critical": 8
 
 def gated(results: list[Result]) -> list[Result]:
     """Results that --fail-on considers: everything not explicitly allowed."""
-    return [r for r in results if (r.get("override") or {}).get("action") != "allow"]
+
+    def allowed(r: Result) -> bool:
+        override: Override = r.get("override") or {}
+        return override.get("action") == "allow"
+
+    return [r for r in results if not allowed(r)]
 
 
 def main(  # noqa: PLR0911,PLR0912,PLR0915 — argument handling: one arm per flag, one exit code per failure
@@ -6389,7 +6436,8 @@ def main(  # noqa: PLR0911,PLR0912,PLR0915 — argument handling: one arm per fl
             print(f"scoville: no rule or amplifier called {args.why!r}", file=sys.stderr)  # noqa: T201
             # A near miss is the common case — an id read off a finding with a
             # typo, or half remembered. Guessing is cheaper than --list-rules.
-            near = difflib.get_close_matches(args.why.strip().lstrip("+").upper(), rule_ids(), n=3, cutoff=0.5)
+            wanted: str = str(args.why).strip().lstrip("+").upper()
+            near = difflib.get_close_matches(wanted, rule_ids(), n=3, cutoff=0.5)
             if near:
                 print(f"scoville: did you mean {', '.join(near)}?", file=sys.stderr)  # noqa: T201 — the tool's output
             else:
@@ -6435,7 +6483,7 @@ def main(  # noqa: PLR0911,PLR0912,PLR0915 — argument handling: one arm per fl
     # An explicit --config that does not exist is an error, not a shrug: the
     # caller asked for a policy and running without it would silently apply a
     # different one than they think.
-    entries = []
+    entries: list[Override] = []
     if not args.no_config:
         config_path = args.config or find_config(basedir)
         if args.config and not Path(args.config).is_file():

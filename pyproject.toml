@@ -17,7 +17,7 @@ Homepage = "https://github.com/fabiocicerchia/scoville"
 Issues = "https://github.com/fabiocicerchia/scoville/issues"
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "build"]
+dev = ["pytest", "ruff", "build", "basedpyright>=1.31"]
 
 [project.scripts]
 scoville = "scoville:main"
@@ -57,3 +57,14 @@ mypy-init-return = true
   "ANN003",   # ditto **kwargs
   "ANN204",   # a fake's __call__ returns whatever the code under test reads
 ]
+
+[tool.basedpyright]
+# FC-PY-003 asks for strict. The point of a type checker in CI is that it knows
+# the types: "unknown" is the finding, not a level of detail to relax away.
+typeCheckingMode = "strict"
+# Matches requires-python, so the checker rejects what the oldest supported
+# interpreter would reject rather than what this machine happens to run.
+pythonVersion = "3.10"
+# Third-party stubs are not this repository's to ship, and a missing one is a
+# packaging fact about someone else's project rather than a defect here.
+reportMissingTypeStubs = false

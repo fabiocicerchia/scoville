@@ -24,13 +24,13 @@ Risk is treated as a property of `binary + flags + target + context`, never of
 the binary alone. Every finding is a **factor** with points and a plain-language
 reason; the factors are summed, clamped to 0–100, and mapped to a band.
 
-| Band | Score | Meaning |
-|---|---|---|
-| `safe` | 0–14 | reads state, changes nothing |
-| `low` | 15–34 | local, trivially undone |
-| `medium` | 35–59 | mutates real state, recoverable with effort |
-| `high` | 60–84 | destructive and scoped |
-| `critical` | 85–100 | unbounded, irreversible, or both |
+| Band       | Score  | Meaning                                     |
+| ---------- | ------ | ------------------------------------------- |
+| `safe`     | 0–14   | reads state, changes nothing                |
+| `low`      | 15–34  | local, trivially undone                     |
+| `medium`   | 35–59  | mutates real state, recoverable with effort |
+| `high`     | 60–84  | destructive and scoped                      |
+| `critical` | 85–100 | unbounded, irreversible, or both            |
 
 Two facets are reported alongside the score, because a single number cannot
 answer both questions:
@@ -86,22 +86,22 @@ In order:
 1. **Base rule.** The binary (plus a regex over its arguments) selects one rule,
    which supplies the base points, an initial scope and reversibility, the
    *why*, and often a safer alternative.
-2. **Amplifiers.** Flags and arguments that make the same command worse — `-r`,
+1. **Amplifiers.** Flags and arguments that make the same command worse — `-r`,
    `--no-preserve-root`, `--privileged`, `--all`, `--force`, a credential in
    argv, `0.0.0.0/0`. Some also widen the scope or harden reversibility.
-3. **Softeners.** The same mechanism with negative points, for the careful form
+1. **Softeners.** The same mechanism with negative points, for the careful form
    of a command: `rm -i`, `sed -i.bak`, `--force-with-lease`, `--preserve-root`,
    ansible's `--limit`. Without these a gate is unusable, because the careful
    spelling would score the same as the careless one.
-4. **Targets.** For commands that act on paths, each argument is examined: the
+1. **Targets.** For commands that act on paths, each argument is examined: the
    filesystem root, an exact system directory, a path *under* one (weighted by
    whether losing it breaks the host or loses payload), a home directory, a
    device node, a regenerable build directory (which *subtracts*), and the
    classic `$VAR/` that becomes `/` when the variable is unset.
-5. **Privilege.** Running under `sudo`/`doas`/`su` adds points and widens scope
+1. **Privilege.** Running under `sudo`/`doas`/`su` adds points and widens scope
    to `host`.
-6. **Carried payloads and wrappers.** See the two sections below.
-7. **Dampeners.** `--dry-run`, `--dryrun`, `--what-if`, `--check`, and `-n` for
+1. **Carried payloads and wrappers.** See the two sections below.
+1. **Dampeners.** `--dry-run`, `--dryrun`, `--what-if`, `--check`, and `-n` for
    the binaries where it means dry run. A dampened command is **capped at 12
    points** (`safe`) and reported as reversible, regardless of what it would
    otherwise have scored.
@@ -133,14 +133,14 @@ scores its auto-confirm once, via the rule.
 A wrapper's risk is its payload. These are unwrapped, scored recursively, and
 folded back with a weight reflecting where the payload lands:
 
-| Carrier | Context | Weight |
-|---|---|---|
-| `docker exec`, `docker run/create` | container | 0.85 |
-| `kubectl exec … --`, `kubectl run` | pod | 0.85 |
-| `ssh host …` | remote host | 1.0 |
-| `sh -c`, `bash -c` | same host | 1.0 |
-| `find -exec`, `find -delete` | once per match | 1.15 |
-| `ansible -a`, `ansible -m shell` | whole inventory | 1.2 |
+| Carrier                            | Context         | Weight |
+| ---------------------------------- | --------------- | ------ |
+| `docker exec`, `docker run/create` | container       | 0.85   |
+| `kubectl exec … --`, `kubectl run` | pod             | 0.85   |
+| `ssh host …`                       | remote host     | 1.0    |
+| `sh -c`, `bash -c`                 | same host       | 1.0    |
+| `find -exec`, `find -delete`       | once per match  | 1.15   |
+| `ansible -a`, `ansible -m shell`   | whole inventory | 1.2    |
 
 A container is *narrower* than the host — its filesystem is usually
 reconstructible — so `docker exec web rm -rf /` scores below `rm -rf /` on the
@@ -202,12 +202,12 @@ would run it, with `kubectl auth can-i` — a `SelfSubjectAccessReview`, which
 asks the API server *would you allow this* and creates, changes and runs
 nothing.
 
-| what `can-i` said | effect |
-| --- | --- |
-| `no` | **−30**, and the factor names the context it asked |
-| `yes`, and `can-i '*' '*'` also `yes` | **+10**, scope widened to `cluster` |
-| `yes` | no change, recorded in the trace |
-| nothing usable — no context, timeout, unreachable, unparseable | **no change**, recorded as "no answer" |
+| what `can-i` said                                              | effect                                             |
+| -------------------------------------------------------------- | -------------------------------------------------- |
+| `no`                                                           | **−30**, and the factor names the context it asked |
+| `yes`, and `can-i '*' '*'` also `yes`                          | **+10**, scope widened to `cluster`                |
+| `yes`                                                          | no change, recorded in the trace                   |
+| nothing usable — no context, timeout, unreachable, unparseable | **no change**, recorded as "no answer"             |
 
 The last row is the rule: **nothing is dampened unless a refusal is positively
 established**, because a dampener that fires on a failed check under-reports
@@ -320,11 +320,11 @@ rather than printing a formulaic one. An unknown id exits `64` and suggests the
 closest matches; amplifier ids resolve in both the `FORCE` and `+FORCE`
 spellings.
 
-| Code | Meaning |
-|---|---|
-| 0 | below the `--fail-on` threshold, or no threshold given |
-| 1 | at or above `--fail-on` |
-| 64 | usage error — bad arguments, unreadable file, empty input |
+| Code | Meaning                                                   |
+| ---- | --------------------------------------------------------- |
+| 0    | below the `--fail-on` threshold, or no threshold given    |
+| 1    | at or above `--fail-on`                                   |
+| 64   | usage error — bad arguments, unreadable file, empty input |
 
 ---
 

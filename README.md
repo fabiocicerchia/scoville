@@ -43,7 +43,7 @@ rm -rf $BUILD_DIR/
 One pass, no shell. Input is split by a quote-, escape- and comment-aware
 splitter, then each command runs the same pipeline:
 
-```
+```text
   "sudo docker run --privileged acme/importer:1.2 && rm -rf $BUILD/"
       │
       ├─ split ──────────────► one command per &&/||/;/newline/pipe

@@ -12,14 +12,14 @@ without three hand-written rules.
 
 ## Components
 
-| Component | Responsibility |
-|---|---|
-| Splitter | Turns a line, a pipeline or a script into individual commands. Handles quoting, `$(…)`, comments, keywords and operators. It is a splitter, not a shell — nothing is executed. |
-| Rule table | Base scores per command, plus generic amplifiers (`--force`, `-y`, credentials in argv, disabled TLS, `0.0.0.0/0`) and softeners (`rm -i`, `--force-with-lease`, `--limit`). |
-| Verb classifier | The long tail. ~50 resource CLIs are scored by the verb in command position, so a new CLI still cannot score `safe` on `delete`. |
-| Carrier unwrapping | `docker exec`, `kubectl exec --`, `ssh`, `sh -c`, `ansible -a`, `find -exec`, `sudo`, `xargs` and command substitutions are scored on their payload, folded back with a context weight. |
-| Introspection | Opt-in (`--introspect`): reads wrapper scripts, Makefile targets, `package.json` scripts and image entrypoints. Read-only, recursive, with a cycle guard. Never pulls, runs or evaluates. |
-| Reporter | Band, score, scope, reversibility and the factor trace; `--format json` for machines. |
+| Component          | Responsibility                                                                                                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Splitter           | Turns a line, a pipeline or a script into individual commands. Handles quoting, `$(…)`, comments, keywords and operators. It is a splitter, not a shell — nothing is executed.            |
+| Rule table         | Base scores per command, plus generic amplifiers (`--force`, `-y`, credentials in argv, disabled TLS, `0.0.0.0/0`) and softeners (`rm -i`, `--force-with-lease`, `--limit`).              |
+| Verb classifier    | The long tail. ~50 resource CLIs are scored by the verb in command position, so a new CLI still cannot score `safe` on `delete`.                                                          |
+| Carrier unwrapping | `docker exec`, `kubectl exec --`, `ssh`, `sh -c`, `ansible -a`, `find -exec`, `sudo`, `xargs` and command substitutions are scored on their payload, folded back with a context weight.   |
+| Introspection      | Opt-in (`--introspect`): reads wrapper scripts, Makefile targets, `package.json` scripts and image entrypoints. Read-only, recursive, with a cycle guard. Never pulls, runs or evaluates. |
+| Reporter           | Band, score, scope, reversibility and the factor trace; `--format json` for machines.                                                                                                     |
 
 ## Data flow
 
@@ -120,12 +120,12 @@ A dampener that fires on a bad `can-i` result **under-reports risk**, which is
 the one kind of wrong answer this tool must not give. So nothing is dampened
 unless a refusal is positively established:
 
-| what happened | what it scores |
-| --- | --- |
-| `can-i` says `no` | −30, with the context named |
-| `can-i` says `yes` **and** `can-i '*' '*'` says `yes` | +10, scope widened to `cluster` — nothing left to catch a mistake |
-| `can-i` says `yes` | unchanged, recorded in the trace |
-| no kubeconfig, no context, timeout, unreachable cluster, unparseable answer | **unchanged**, recorded as "no answer" |
+| what happened                                                               | what it scores                                                    |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `can-i` says `no`                                                           | −30, with the context named                                       |
+| `can-i` says `yes` **and** `can-i '*' '*'` says `yes`                       | +10, scope widened to `cluster` — nothing left to catch a mistake |
+| `can-i` says `yes`                                                          | unchanged, recorded in the trace                                  |
+| no kubeconfig, no context, timeout, unreachable cluster, unparseable answer | **unchanged**, recorded as "no answer"                            |
 
 The refusal is points rather than a cap (which is what `--dry-run` gets),
 because the context is read **now** and the command may run later against a

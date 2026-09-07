@@ -287,6 +287,19 @@ def test_file_input_reports_line_numbers(tmp_path: Path, capsys: pytest.CaptureF
     assert "deploy.sh:4:" in out
 
 
+def test_file_input_survives_undecodable_bytes(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """A byte that is not valid UTF-8 is replaced, not fatal.
+
+    The encoding arguments used to be passed to Path() -- where they are
+    ignored -- instead of to open(), so this read used the locale encoding
+    with no replacement and died on the 0xff.
+    """
+    script = tmp_path / "deploy.sh"
+    script.write_bytes(b"#!/bin/sh\n# caf\xff\nrm -rf /opt/app\n")
+    assert main(["-f", str(script), "--fail-on", "medium"]) == 1
+    assert "deploy.sh:3:" in capsys.readouterr().out
+
+
 def test_list_rules(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["--list-rules"]) == 0
     assert "FS-RM" in capsys.readouterr().out

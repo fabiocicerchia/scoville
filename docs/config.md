@@ -42,11 +42,11 @@ directory you happened to run from.
 
 ## The three operations
 
-| Operation | Effect |
-| --- | --- |
-| `allow` | Score and report as normal, but **do not trip `--fail-on`** |
-| `deny` | Force `critical`, whatever the command would otherwise score |
-| `rescore` | Pin to a named band |
+| Operation | Effect                                                       |
+| --------- | ------------------------------------------------------------ |
+| `allow`   | Score and report as normal, but **do not trip `--fail-on`**  |
+| `deny`    | Force `critical`, whatever the command would otherwise score |
+| `rescore` | Pin to a named band                                          |
 
 **`allow` does not hide the finding.** The command keeps its real score and the
 override is appended to the factor trace with its reason. Silent suppression is

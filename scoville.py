@@ -27,6 +27,9 @@ import shutil
 import subprocess
 import sys
 import textwrap
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any, cast
 
 __version__ = "0.3.0"  # x-release-please-version
 
@@ -34,6 +37,26 @@ __version__ = "0.3.0"  # x-release-please-version
 
 # score -> band. Deliberately coarse: the band drives decisions, the score
 # only orders commands within a band.
+# A rule or amplifier as the tables below declare it, and a scored result as
+# the renderers consume it. Both stay dicts: the tables are written as literals,
+# and every reader does a `.get` on optional keys rather than reaching for an
+# attribute that may not be there.
+Entry = dict[str, Any]
+Result = dict[str, Any]
+# One function or alias definition found in the text being scored:
+# {kind, name, value, at, line}.
+Definition = dict[str, Any]
+# One factor line under a result: what matched, and what it did to the score.
+Factor = dict[str, Any]
+# A factor as the scanners emit it, before it becomes a Factor dict: the
+# points, why, the scope and reversibility it implies, and -- when it came
+# from a named rule or amplifier -- that id.
+FactorTuple = tuple[int, str, str | None, str | None] | tuple[int, str, str | None, str | None, str]
+# A parsed config file (--config), or the defaults.
+# One entry from a .scovillerc: {action, match, why, source} and, for a
+# rescore, the level it forces.
+Override = dict[str, Any]
+
 BANDS = ((85, "critical"), (60, "high"), (35, "medium"), (15, "low"), (0, "safe"))
 LEVELS = ("safe", "low", "medium", "high", "critical")
 
@@ -43,7 +66,7 @@ SCOPES = ("none", "file", "directory", "container", "host", "network", "cluster"
 REVERT = ("reversible", "recoverable", "irreversible")
 
 
-def band(score):
+def band(score: int) -> str:
     """Name the band a score falls in.
 
     Deliberately coarse: the band is what a caller acts on, the score only
@@ -55,12 +78,12 @@ def band(score):
     return "safe"
 
 
-def widest(a, b):
+def widest(a: str, b: str) -> str:
     """Return the wider of two blast radii — scope only ever grows."""
     return a if SCOPES.index(a) >= SCOPES.index(b) else b
 
 
-def harder(a, b):
+def harder(a: str, b: str) -> str:
     """Return the less recoverable of two verdicts — reversibility only ever
     gets worse as factors accumulate."""
     return a if REVERT.index(a) >= REVERT.index(b) else b
@@ -69,19 +92,36 @@ def harder(a, b):
 # ----------------------------------------------------------------- rules ---
 
 
-def _check(rid, scope, revert):
+def _check(rid: str, scope: str | None, revert: str | None) -> None:
     """Refuse a rule that names a scope or reversibility nobody defined.
 
     The rule set is data, so a typo in a literal would otherwise sail through
     and score commands with a vocabulary the rest of the module cannot read.
     """
-    assert scope in SCOPES, f"{rid}: unknown scope {scope!r}"
-    assert revert in REVERT, f"{rid}: unknown reversibility {revert!r}"
+    if scope not in SCOPES:
+        msg = f"{rid}: unknown scope {scope!r}"
+        raise ValueError(msg)
+    if revert not in REVERT:
+        msg = f"{rid}: unknown reversibility {revert!r}"
+        raise ValueError(msg)
 
 
-def R(
-    rid, bins, sub, base, scope, revert, why, advice=None, generic=False, paths=False, subsumes=""
-):
+def R(  # noqa: N802,PLR0913,PLR0917 — the rule table's columns; see the comment above
+    rid: str,
+    # Space-separated, because that is how the table below reads: one string
+    # per rule rather than a list literal per row. `.split()` happens once,
+    # here.
+    bins: str,
+    sub: str | None,
+    base: int,
+    scope: str | None,
+    revert: str | None,
+    why: str,
+    advice: str | None = None,
+    generic: bool = False,
+    paths: bool = False,
+    subsumes: str = "",
+) -> Entry:
     """A rule: what this command *is*, before flags and targets are read.
 
     `generic` marks verb-classification rules (any `<cli> … delete`). A
@@ -151,8 +191,7 @@ RULES = [
     ),
     R(
         "READ-KEYWORD",
-        "if then else elif fi for while until do done case esac in function "
-        "select break continue return exit",
+        "if then else elif fi for while until do done case esac in function select break continue return exit",
         None,
         0,
         "none",
@@ -340,8 +379,7 @@ RULES = [
         35,
         "host",
         "recoverable",
-        "runs another file's commands in this shell, so it can also change this shell's "
-        "environment and functions",
+        "runs another file's commands in this shell, so it can also change this shell's environment and functions",
     ),
     R(
         "EXEC-SHELL",
@@ -426,8 +464,7 @@ RULES = [
         25,
         "host",
         "recoverable",
-        "changes service state; a restart is a brief outage, and a config that no longer parses "
-        "will not come back up",
+        "changes service state; a restart is a brief outage, and a config that no longer parses will not come back up",
     ),
     R(
         "SYS-SYSTEMCTL",
@@ -1514,8 +1551,7 @@ RULES = [
         90,
         "host",
         "irreversible",
-        "destroys or rewrites the LUKS header; without it the data is unrecoverable even with "
-        "the right passphrase",
+        "destroys or rewrites the LUKS header; without it the data is unrecoverable even with the right passphrase",
         "`cryptsetup luksHeaderBackup` first, always",
     ),
     R(
@@ -1543,8 +1579,7 @@ RULES = [
         55,
         "host",
         "recoverable",
-        "auto-repair discards what it cannot reconcile; `xfs_repair -L` zeroes the log and its "
-        "unflushed writes",
+        "auto-repair discards what it cannot reconcile; `xfs_repair -L` zeroes the log and its unflushed writes",
         "image the filesystem first if the data is worth more than the downtime",
         subsumes="ASSUME-YES",
     ),
@@ -1570,8 +1605,7 @@ RULES = [
     # --- boot path: the host comes back, or it does not ----------------------
     R(
         "BOOT-LOADER",
-        "grub-install update-grub grub2-mkconfig grub2-install dracut mkinitcpio "
-        "update-initramfs efibootmgr bootctl",
+        "grub-install update-grub grub2-mkconfig grub2-install dracut mkinitcpio update-initramfs efibootmgr bootctl",
         None,
         60,
         "host",
@@ -1646,8 +1680,7 @@ RULES = [
         85,
         "cluster",
         "irreversible",
-        "resets the node out of the cluster: certificates, etcd member and CNI state are all "
-        "removed",
+        "resets the node out of the cluster: certificates, etcd member and CNI state are all removed",
         "on a control-plane node this can lose quorum for the whole cluster",
     ),
     R(
@@ -1792,8 +1825,7 @@ RULES = [
         55,
         "network",
         "recoverable",
-        "removing a bridge disconnects every interface attached to it — on a hypervisor that "
-        "is every guest",
+        "removing a bridge disconnects every interface attached to it — on a hypervisor that is every guest",
     ),
     # --- macOS ---------------------------------------------------------------
     R(
@@ -1866,8 +1898,7 @@ RULES = [
         55,
         "account",
         "irreversible",
-        "`rclone sync` makes the destination match the source: files only at the destination are "
-        "deleted",
+        "`rclone sync` makes the destination match the source: files only at the destination are deleted",
         "`--dry-run` first, and prefer `copy` when nothing should be removed",
     ),
     R(
@@ -1886,8 +1917,7 @@ RULES = [
         65,
         "account",
         "irreversible",
-        "drops snapshots from the backup repository — this is the copy you keep "
-        "for when the primary is already gone",
+        "drops snapshots from the backup repository — this is the copy you keep for when the primary is already gone",
         "`restic forget --dry-run`, and keep a retention policy rather than ad-hoc forgets",
     ),
     R(
@@ -2039,8 +2069,7 @@ RULES = [
         80,
         "account",
         "irreversible",
-        "disabling a secrets mount deletes every secret stored under it, not just the route to "
-        "them",
+        "disabling a secrets mount deletes every secret stored under it, not just the route to them",
         "`vault secrets move` relocates a mount without emptying it",
     ),
     R(
@@ -2063,8 +2092,7 @@ RULES = [
         "irreversible",
         "Vault stops recording who read which secret, and keeps serving requests while it does "
         "— the gap in the audit trail is silent",
-        "enable the replacement device first; Vault only refuses requests when *every* audit "
-        "device fails",
+        "enable the replacement device first; Vault only refuses requests when *every* audit device fails",
     ),
     R(
         "VAULT-LEASE-REVOKE",
@@ -2084,8 +2112,7 @@ RULES = [
         45,
         "account",
         "irreversible",
-        "a token revoke takes its child tokens too, so revoking a parent ends every session "
-        "issued from it",
+        "a token revoke takes its child tokens too, so revoking a parent ends every session issued from it",
     ),
     R(
         "VAULT-POLICY-DELETE",
@@ -2136,8 +2163,7 @@ RULES = [
         65,
         "cluster",
         "recoverable",
-        "shrinks the raft quorum; one peer too many and the cluster loses quorum and stops "
-        "serving entirely",
+        "shrinks the raft quorum; one peer too many and the cluster loses quorum and stops serving entirely",
     ),
     # velero -----------------------------------------------------------------
     R(
@@ -2188,8 +2214,7 @@ RULES = [
         55,
         "cluster",
         "recoverable",
-        "nothing breaks today: backups simply stop being taken, and the cost lands at the next "
-        "restore instead",
+        "nothing breaks today: backups simply stop being taken, and the cost lands at the next restore instead",
         "`velero schedule get` to confirm what else still covers these namespaces",
     ),
     R(
@@ -2221,8 +2246,7 @@ RULES = [
         60,
         "cluster",
         "irreversible",
-        "deleting an application cascades by default: the Kubernetes resources it manages are "
-        "deleted with it",
+        "deleting an application cascades by default: the Kubernetes resources it manages are deleted with it",
         "`--cascade=false` removes the Argo CD record and leaves the workloads running",
     ),
     R(
@@ -2244,8 +2268,7 @@ RULES = [
         70,
         "cluster",
         "irreversible",
-        "deleting a project takes every application in it, and each of those cascades to its own "
-        "cluster resources",
+        "deleting a project takes every application in it, and each of those cascades to its own cluster resources",
     ),
     R(
         "ARGOCD-CLUSTER-RM",
@@ -2307,8 +2330,7 @@ RULES = [
         80,
         "account",
         "irreversible",
-        "the data on the volume goes with it, and `--force` deletes it even while an instance "
-        "still has it attached",
+        "the data on the volume goes with it, and `--force` deletes it even while an instance still has it attached",
         "`openstack volume snapshot create` first — the snapshot is the only way back",
     ),
     R(
@@ -2348,8 +2370,7 @@ RULES = [
         88,
         "account",
         "irreversible",
-        "deletes every resource the project owns — servers, volumes, images, networks — in one "
-        "call",
+        "deletes every resource the project owns — servers, volumes, images, networks — in one call",
         "`--dry-run` prints the list without touching any of it",
     ),
     R(
@@ -2359,8 +2380,7 @@ RULES = [
         85,
         "account",
         "irreversible",
-        "a Heat stack delete removes every resource the template created, database volumes "
-        "included",
+        "a Heat stack delete removes every resource the template created, database volumes included",
     ),
     R(
         "OS-NETWORK-DELETE",
@@ -2441,8 +2461,7 @@ RULES = [
         55,
         "account",
         "recoverable",
-        "destroys one machine — the app, its volumes and its config survive, and `fly deploy` "
-        "recreates it",
+        "destroys one machine — the app, its volumes and its config survive, and `fly deploy` recreates it",
     ),
     R(
         "FLY-VOLUME-DESTROY",
@@ -2451,10 +2470,8 @@ RULES = [
         85,
         "account",
         "irreversible",
-        "a Fly volume is a single local disk, not a replicated one: this destroys the only copy "
-        "of the data on it",
-        "`fly volumes snapshots list <id>` — snapshots are kept about five days and are the only "
-        "way back",
+        "a Fly volume is a single local disk, not a replicated one: this destroys the only copy of the data on it",
+        "`fly volumes snapshots list <id>` — snapshots are kept about five days and are the only way back",
     ),
     R(
         "FLY-APPS-DESTROY",
@@ -2463,8 +2480,7 @@ RULES = [
         80,
         "account",
         "irreversible",
-        "destroys the app with its machines and its volumes, and releases the name for anyone "
-        "else to claim",
+        "destroys the app with its machines and its volumes, and releases the name for anyone else to claim",
         "`fly scale count 0` stops it running and billing without destroying anything",
     ),
     R(
@@ -2495,8 +2511,7 @@ RULES = [
         20,
         "account",
         "recoverable",
-        "makes the repository read-only and can be undone — the reversible alternative to "
-        "`repo delete`",
+        "makes the repository read-only and can be undone — the reversible alternative to `repo delete`",
     ),
     R(
         "GH-REPO-DEL",
@@ -2505,8 +2520,7 @@ RULES = [
         75,
         "account",
         "irreversible",
-        "deletes the repository with its issues, PRs and releases; the name is then claimable by "
-        "anyone",
+        "deletes the repository with its issues, PRs and releases; the name is then claimable by anyone",
         "`gh repo archive` keeps it readable and reversible",
     ),
     R(
@@ -2537,8 +2551,7 @@ RULES = [
         50,
         "account",
         "irreversible",
-        "GitHub has no undo for a deleted issue: the thread, its comments and every "
-        "cross-reference to it go",
+        "GitHub has no undo for a deleted issue: the thread, its comments and every cross-reference to it go",
         "closing it keeps the history and is reversible",
     ),
     R(
@@ -2548,8 +2561,7 @@ RULES = [
         35,
         "account",
         "irreversible",
-        "deletes the run and its logs — the record of what CI actually did is the thing being "
-        "removed",
+        "deletes the run and its logs — the record of what CI actually did is the thing being removed",
     ),
     R(
         "GH-SECRET",
@@ -2568,8 +2580,7 @@ RULES = [
         35,
         "account",
         "recoverable",
-        "triggers a workflow: what it does is whatever the workflow does, which on a deploy "
-        "pipeline is a deploy",
+        "triggers a workflow: what it does is whatever the workflow does, which on a deploy pipeline is a deploy",
     ),
     R(
         "GH-AUTH-TOKEN",
@@ -2578,8 +2589,7 @@ RULES = [
         35,
         "account",
         "reversible",
-        "prints the OAuth token to stdout, where it lands in scrollback and in the CI log if "
-        "this runs in one",
+        "prints the OAuth token to stdout, where it lands in scrollback and in the CI log if this runs in one",
         "let `gh` make the authenticated call instead of extracting the token",
     ),
     R(
@@ -2642,7 +2652,18 @@ INTERPRETERS = SHELLS | {"python", "python3", "perl", "ruby", "node", "php"}
 # ------------------------------------------------------------ amplifiers ---
 
 
-def A(aid, bins, pattern, points, why, scope=None, revert=None, raw=False):
+def A(  # noqa: N802,PLR0913,PLR0917 — the amplifier table's columns; see above
+    aid: str,
+    # Space-separated like R's, and None for an amplifier that applies to any
+    # command rather than to a named set.
+    bins: str | None,
+    pattern: str,
+    points: int,
+    why: str,
+    scope: str | None = None,
+    revert: str | None = None,
+    raw: bool = False,
+) -> Entry:
     """A modifier: how flags make the same command better or worse.
 
     Amplifiers carry no advice — the rule owns that — so a stray fourth string
@@ -2867,8 +2888,7 @@ AMPS = [
         "umount",
         r"(^|\s)-[a-zA-Z]*a(\s|$)|--all\b",
         45,
-        "-a unmounts everything in the mount table, including the filesystems the running "
-        "system is reading from",
+        "-a unmounts everything in the mount table, including the filesystems the running system is reading from",
         "host",
     ),
     A(
@@ -2891,8 +2911,7 @@ AMPS = [
         "reboot shutdown halt poweroff systemctl",
         r"(^|\s)-f(\s|$)|--force\b",
         15,
-        "skips the clean shutdown: filesystems are not unmounted and services get no chance "
-        "to flush",
+        "skips the clean shutdown: filesystems are not unmounted and services get no chance to flush",
         "host",
     ),
     A(
@@ -3032,8 +3051,7 @@ AMPS = [
         r"insecure-skip-tls-verify|trust-all|no-verify-ssl|disable-ssl-validation)\b|"
         r"--validate=false",
         20,
-        "certificate verification disabled: a machine-in-the-middle is indistinguishable from "
-        "the real endpoint",
+        "certificate verification disabled: a machine-in-the-middle is indistinguishable from the real endpoint",
     ),
     A(
         "NO-SIGNATURE-CHECK",
@@ -3138,8 +3156,7 @@ AMPS = [
         "velero",
         r"--existing-resource-policy[= ]update",
         20,
-        "restores over objects that already exist: live resources are overwritten with the state "
-        "in the backup",
+        "restores over objects that already exist: live resources are overwritten with the state in the backup",
         "cluster",
         "irreversible",
     ),
@@ -3167,8 +3184,7 @@ AMPS = [
         "flyctl fly",
         r"--strategy[= ]immediate",
         25,
-        "the immediate strategy stops every machine before starting the new ones — a full outage, "
-        "not a rolling deploy",
+        "the immediate strategy stops every machine before starting the new ones — a full outage, not a rolling deploy",
         "account",
     ),
     A(
@@ -3232,8 +3248,7 @@ SOFTENERS = [
         "argocd",
         r"--cascade[= ]?false",
         -20,
-        "`--cascade=false` removes the Argo CD record only: the Kubernetes resources it manages "
-        "stay running",
+        "`--cascade=false` removes the Argo CD record only: the Kubernetes resources it manages stay running",
     ),
     A(
         "FLY-STAGE",
@@ -3253,9 +3268,7 @@ SOFTENERS = [
 
 DAMPENERS = [
     (
-        re.compile(
-            r"--dry-run(?![= ]?(none|server))|--dryrun|--what-if|--no-act|(^|\s)--check(\s|$)"
-        ),
+        re.compile(r"--dry-run(?![= ]?(none|server))|--dryrun|--what-if|--no-act|(^|\s)--check(\s|$)"),
         "--dry-run: reports what it would do and changes nothing",
     ),
     (re.compile(r"(^|\s)-n(\s|$)"), None),  # only honoured for the bins below
@@ -4252,7 +4265,7 @@ INCIDENTS = {
 }
 
 
-def entry_by_id(rid):
+def entry_by_id(rid: str) -> tuple[str | None, Entry | None]:
     """Find a rule or amplifier by id. Returns (kind, entry) or (None, None).
 
     Amplifier ids are printed with a leading `+` by --list-rules, so both
@@ -4269,16 +4282,16 @@ def entry_by_id(rid):
     return None, None
 
 
-def rule_ids():
+def rule_ids() -> list[str]:
     """Every id `--why` will answer to."""
     return sorted({r["id"] for r in RULES} | {a["id"] for a in AMPS + SOFTENERS})
 
 
-def _wrap(text, indent="  ", width=78, hang=""):
+def _wrap(text: str, indent: str = "  ", width: int = 78, hang: str = "") -> str:
     return textwrap.fill(text, width=width, initial_indent=indent, subsequent_indent=indent + hang)
 
 
-def _reachable(entry, kind):
+def _reachable(entry: Entry, kind: str) -> tuple[list[Entry], list[Entry]]:
     """The amplifiers and softeners that can apply to this rule's binaries.
 
     Answers "why this band" with the range the rule can actually reach rather
@@ -4297,9 +4310,10 @@ def _reachable(entry, kind):
     return amps, softs
 
 
-def _related(entry):
+def _related(entry: Entry) -> tuple[list[Entry], list[Entry]]:
     """Other rules on the same binaries, and the generic ones this beats."""
-    same, beats = [], []
+    same: list[Entry] = []
+    beats: list[Entry] = []
     for r in RULES:
         if r["id"] == entry["id"] or not (r["bins"] & entry["bins"]):
             continue
@@ -4307,7 +4321,7 @@ def _related(entry):
     return same, beats
 
 
-def _why_head(kind, entry, width):
+def _why_head(kind: str, entry: Entry, width: int) -> list[str]:
     """The identity line: what this is, and the three facts a score reports."""
     if kind == "rule":
         head = (
@@ -4322,7 +4336,7 @@ def _why_head(kind, entry, width):
     return [head, "=" * min(len(head), width), ""]
 
 
-def _why_matches(kind, entry):
+def _why_matches(kind: str, entry: Entry) -> list[str]:
     """What it matches, and — as importantly — what it does not."""
     out = ["MATCHES"]
     out.append(_wrap(", ".join(sorted(entry["bins"])) if entry["bins"] else "any command"))
@@ -4343,20 +4357,17 @@ def _why_matches(kind, entry):
         )
     elif kind == "rule":
         out.append(
-            _wrap(
-                "Not matched: anything a rule with a higher base claims first. "
-                "Specificity wins before score does."
-            )
+            _wrap("Not matched: anything a rule with a higher base claims first. Specificity wins before score does.")
         )
-    return out + [""]
+    return [*out, ""]
 
 
-def _why_incident(entry):
+def _why_incident(entry: Entry) -> list[str]:
     """The prose half, or an honest admission that it has not been written."""
     out = ["INCIDENT CLASS"]
     note = INCIDENTS.get(entry["id"])
     if note:
-        return out + [_wrap(note), ""]
+        return [*out, _wrap(note), ""]
     out.append(_wrap(f"Not written yet. The one-line reason is: {entry['why']}"))
     out.append(
         _wrap(
@@ -4366,10 +4377,10 @@ def _why_incident(entry):
             "is uninteresting."
         )
     )
-    return out + [""]
+    return [*out, ""]
 
 
-def _why_band(entry, kind):
+def _why_band(entry: Entry, kind: str) -> list[str]:
     """Why this band, and what the flags on these binaries can do to it."""
     out = [
         "WHY THIS BAND",
@@ -4405,21 +4416,18 @@ def _why_band(entry, kind):
             "`--list-rules` prints them."
         )
     )
-    return out + [""]
+    return [*out, ""]
 
 
-def _why_modifiers(entries):
-    return [
-        _wrap(f"{a['points']:+d}  {a['id']}: {a['why']}", indent="    ", hang="     ")
-        for a in entries
-    ]
+def _why_modifiers(entries: list[Entry]) -> list[str]:
+    return [_wrap(f"{a['points']:+d}  {a['id']}: {a['why']}", indent="    ", hang="     ") for a in entries]
 
 
-def _why_safer(entry):
+def _why_safer(entry: Entry) -> list[str]:
     """The alternative, or a note that the rule owes one."""
     if entry["advice"]:
         body = entry["advice"]
-    elif entry["base"] >= 35:
+    elif entry["base"] >= TOP_BAND_BASE:
         body = (
             "No alternative recorded. For a rule at this level that is a gap in the "
             "rule, not a statement that none exists."
@@ -4429,7 +4437,7 @@ def _why_safer(entry):
     return ["SAFER", _wrap(body), ""]
 
 
-def _why_related(entry):
+def _why_related(entry: Entry) -> list[str]:
     """Neighbours on the same binaries, and the classifiers this one beats."""
     same, beats = _related(entry)
     if not (same or beats):
@@ -4439,13 +4447,11 @@ def _why_related(entry):
         _wrap(f"{r['id']} ({r['base']}) — {r['why']}", indent="    ", hang="  ")
         for r in sorted(same, key=lambda x: -x["base"])[:8]
     ]
-    out += [
-        _wrap(f"beats {r['id']} ({r['base']}), the verb classifier", indent="    ") for r in beats
-    ]
-    return out + [""]
+    out += [_wrap(f"beats {r['id']} ({r['base']}), the verb classifier", indent="    ") for r in beats]
+    return [*out, ""]
 
 
-def why_text(rid, width=78):
+def why_text(rid: str, width: int = 78) -> str | None:
     """The long form for one rule or amplifier, or None if the id is unknown.
 
     Assembled from the rule table rather than written out twice: the band, the
@@ -4458,15 +4464,12 @@ def why_text(rid, width=78):
     changed without the whole view in your head.
     """
     kind, entry = entry_by_id(rid)
-    if not entry:
+    if kind is None or entry is None:
         return None
     out = _why_head(kind, entry, width) + _why_matches(kind, entry) + _why_incident(entry)
     if kind == "rule":
         out += _why_band(entry, kind) + _why_safer(entry) + _why_related(entry)
-    out.append(
-        f"  scoville --list-rules   ·   {len(INCIDENTS)} of {len(rule_ids())} ids "
-        "have an incident note"
-    )
+    out.append(f"  scoville --list-rules   ·   {len(INCIDENTS)} of {len(rule_ids())} ids have an incident note")
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -4475,18 +4478,22 @@ def why_text(rid, width=78):
 OPS = ("&&", "||", ";;", "|&")
 
 
-def split_commands(text):
+def split_commands(  # noqa: PLR0912,PLR0915 — one pass over shell syntax; the branches are the grammar
+    text: str,
+) -> list[tuple[str, int, str | None]]:
     """Split a shell snippet into (raw_command, offset, preceding_operator).
 
     Quote-, escape-, comment- and $()-aware. Not a shell grammar: it is a
     splitter good enough to find where one command ends and the next begins.
     """
-    out, buf = [], []
+    # (command, offset, the operator that preceded it -- None for the first).
+    out: list[tuple[str, int, str | None]] = []
+    buf: list[str] = []
     start, i, n, depth = 0, 0, len(text), 0
-    prev_op = None
-    quote = None
+    prev_op: str | None = None
+    quote: str | None = None
 
-    def flush(op, end):
+    def flush(op: str | None, end: int) -> None:
         nonlocal buf, start, prev_op
         raw = "".join(buf).strip()
         # drop grouping characters left dangling by the split, never a balanced pair
@@ -4555,15 +4562,19 @@ def split_commands(text):
 SUBSHELL = re.compile(r"\$\(([^()]*)\)|`([^`]*)`")
 
 
-def subshell_commands(raw, offset):
-    """Command substitutions run *first* and are easy to miss when skimming."""
+def subshell_commands(raw: str, offset: int) -> Iterator[tuple[str, int]]:
+    """Command substitutions run *first* and are easy to miss when skimming.
+
+    Yields (command, offset) so a finding can point at where in the line it
+    came from.
+    """
     for m in SUBSHELL.finditer(raw):
         inner = m.group(1) or m.group(2) or ""
         if inner.strip():
             yield inner.strip(), offset + m.start()
 
 
-def tokenize(raw):
+def tokenize(raw: str) -> list[str]:
     """Split a command into tokens, whitespace-splitting when shlex refuses.
 
     An unbalanced quote is a broken command, not a reason to score nothing:
@@ -4603,15 +4614,16 @@ WRAPPERS = {
 WRAPPER_VALUE_FLAGS = {"-u", "-g", "-n", "-I", "-P", "-L", "-a", "-s", "-p", "--user", "-i"}
 
 
-def strip_prefix(tokens):
+def strip_prefix(tokens: list[str]) -> tuple[list[str], bool, list[str]]:
     """Peel env assignments and wrappers to reach the command that matters."""
-    i, privileged, wrappers = 0, False, []
+    i, privileged = 0, False
+    wrappers: list[str] = []
     while i < len(tokens):
         t = tokens[i]
         if ENV_ASSIGN.match(t):
             i += 1
             continue
-        base = os.path.basename(t)
+        base = Path(t).name
         if base in WRAPPERS:
             if base in ("sudo", "doas", "su"):
                 privileged = True
@@ -4626,9 +4638,7 @@ def strip_prefix(tokens):
                     takes_value = t2 in WRAPPER_VALUE_FLAGS
                     i += 2 if takes_value and i + 1 < len(tokens) else 1
                     continue
-                if base in ("timeout", "nice", "ionice", "chrt") and re.fullmatch(
-                    r"[\d.]+[smhd]?", t2
-                ):
+                if base in ("timeout", "nice", "ionice", "chrt") and re.fullmatch(r"[\d.]+[smhd]?", t2):
                     i += 1
                     continue
                 if base == "flock" and (t2.startswith("/") or t2.isdigit()):
@@ -4699,7 +4709,7 @@ SSH_VALUE_FLAGS = {
 }
 
 
-def _skip_flags(tokens, value_flags):
+def _skip_flags(tokens: list[str], value_flags: set[str]) -> int:
     """Index of the first non-flag token.
 
     `value_flags` are the flags that swallow the next token as their value,
@@ -4722,7 +4732,9 @@ def _skip_flags(tokens, value_flags):
     return i
 
 
-def carried_command(binary, args):
+def carried_command(  # noqa: PLR0911,PLR0912 — one arm per wrapper this understands
+    binary: str, args: list[str]
+) -> tuple[list[str] | None, str | None, str | None]:
     """Return (payload_tokens, context, target) for commands that carry another.
 
     context drives how the payload's score is folded in; target is the
@@ -4806,7 +4818,7 @@ CONTEXTS = {
 # ---------------------------------------------------------- introspection ---
 
 
-def _docker(args, timeout=5):
+def _docker(args: list[str], timeout: float = 5) -> str | None:
     """Run one read-only `docker` subcommand and return its stdout, or None.
 
     Nothing is ever executed to score it: this only ever inspects. A missing
@@ -4816,15 +4828,19 @@ def _docker(args, timeout=5):
     if not shutil.which("docker"):
         return None
     try:
-        r = subprocess.run(
-            ["docker", *args], capture_output=True, text=True, timeout=timeout, check=False
+        exe = shutil.which("docker")
+        if exe is None:
+            return None
+        # Read-only inspects, fixed argv, no shell.
+        r = subprocess.run(  # noqa: S603
+            [exe, *args], capture_output=True, text=True, timeout=timeout, check=False
         )
     except (OSError, subprocess.SubprocessError):
         return None
     return r.stdout.strip() if r.returncode == 0 else None
 
 
-def introspect_target(kind, target):
+def introspect_target(kind: str, target: str | None) -> Entry | None:
     """Read-only lookup of what a container/image actually runs.
 
     Never pulls, never starts anything: if the image is not local, say so.
@@ -4839,8 +4855,7 @@ def introspect_target(kind, target):
         if not out:
             return {
                 "resolved": False,
-                "note": f"cannot inspect container {target!r} — not running here, "
-                f"or no docker daemon",
+                "note": f"cannot inspect container {target!r} — not running here, or no docker daemon",
             }
     else:
         out = _docker(
@@ -4858,9 +4873,9 @@ def introspect_target(kind, target):
                 "note": f"cannot inspect image {target!r} — not pulled here, or no docker "
                 f"daemon; scoville never pulls to find out",
             }
-    ep, cmd, user, ref = (out.split("|", 3) + ["", "", "", ""])[:4]
+    ep, cmd, user, ref = ([*out.split("|", 3), "", "", "", ""])[:4]
 
-    def parse(v):
+    def parse(v: str) -> Any:
         try:
             return json.loads(v) or []
         except (ValueError, TypeError):
@@ -4904,16 +4919,14 @@ ALIAS_DEF = re.compile(
     re.MULTILINE,
 )
 # `name() {` and `function name {`, the two spellings bash accepts.
-FUNC_HEAD = re.compile(
-    r"(?:^|[;&|]\s*)\s*(?:function\s+)?(?P<name>[\w.-]+)\s*\(\s*\)\s*\{", re.MULTILINE
-)
+FUNC_HEAD = re.compile(r"(?:^|[;&|]\s*)\s*(?:function\s+)?(?P<name>[\w.-]+)\s*\(\s*\)\s*\{", re.MULTILINE)
 FUNC_HEAD_KW = re.compile(r"(?:^|[;&|]\s*)\s*function\s+(?P<name>[\w.-]+)\s*\{", re.MULTILINE)
 
 CARRIER_ALIAS = "resolved alias "
 CARRIER_FUNCTION = "resolved function "
 
 
-def _balanced_body(text, brace_at):
+def _balanced_body(text: str, brace_at: int) -> str | None:
     """Text between the `{` at `brace_at` and its matching `}`, or None.
 
     Brace counting, not a regex: a function body containing `${VAR}` or a
@@ -4931,14 +4944,14 @@ def _balanced_body(text, brace_at):
     return None
 
 
-def collect_definitions(text):
+def collect_definitions(text: str) -> list[Definition]:
     """Functions and aliases defined in `text`, each with the offset it goes live.
 
     Nothing outside `text` is read. Resolving the user's `~/.bashrc` would make
     the same script score differently on two machines, which is a worse answer
     than an unknown command — the score has to be a property of the input.
     """
-    defs = []
+    defs: list[Definition] = []
     for m in ALIAS_DEF.finditer(text):
         val = m.group("val")
         if val[:1] in "'\"":
@@ -4973,7 +4986,7 @@ def collect_definitions(text):
     return defs
 
 
-def definition_at(defs, name, offset):
+def definition_at(defs: list[Definition] | None, name: str, offset: int) -> Definition | None:
     """The definition of `name` in scope at `offset`, or None.
 
     The last definition before the call site wins — that is what redefinition
@@ -4982,8 +4995,8 @@ def definition_at(defs, name, offset):
     to bottom, and scoring it anyway would be a false positive on the common
     layout of helpers at the bottom of a script.
     """
-    found = None
-    for d in defs:
+    found: Definition | None = None
+    for d in defs or []:
         if d["name"] == name and d["at"] <= offset:
             found = d
     return found
@@ -5096,7 +5109,7 @@ KUBE_VALUE_FLAGS = {
 }
 
 
-def _kubectl(binary, args, timeout):
+def _kubectl(binary: str, args: list[str], timeout: float) -> str | None:
     """Run one read-only kubectl subcommand and return stdout, or None.
 
     Same collapse as _docker: a missing binary, a timeout, a non-zero exit and
@@ -5107,7 +5120,8 @@ def _kubectl(binary, args, timeout):
     if not exe:
         return None
     try:
-        r = subprocess.run(
+        # Read-only `kubectl auth can-i` / `config current-context`, fixed argv.
+        r = subprocess.run(  # noqa: S603
             [exe, *args], capture_output=True, text=True, timeout=timeout, check=False
         )
     except (OSError, subprocess.SubprocessError):
@@ -5117,14 +5131,16 @@ def _kubectl(binary, args, timeout):
     return (r.stdout or "").strip()
 
 
-def kube_target(args):
+def kube_target(args: list[str]) -> tuple[str | None, str | None, str | None]:
     """(verb, resource, namespace) for a kubectl command line, or (None, ...).
 
     Positional-only: the first two non-flag tokens. Enough for the commands
     worth scoring, and it declines rather than guesses on anything else.
     """
-    verb = resource = namespace = None
-    positional = []
+    verb: str | None = None
+    resource: str | None = None
+    namespace: str | None = None
+    positional: list[str] = []
     skip = False
     for i, a in enumerate(args):
         if skip:
@@ -5153,7 +5169,7 @@ def kube_target(args):
     return verb, resource, namespace
 
 
-def kube_context(binary, timeout):
+def kube_context(binary: str, timeout: float) -> str | None:
     """The context name `can-i` will be answered by, or None.
 
     A local kubeconfig read, not a cluster call — but if there is no context
@@ -5163,7 +5179,7 @@ def kube_context(binary, timeout):
     return out or None
 
 
-def kube_can_i(binary, verb, resource, namespace, timeout):
+def kube_can_i(binary: str, verb: str, resource: str, namespace: str | None, timeout: float) -> bool | None:
     """True / False / None for "may this context do that".
 
     None is not a third state to act on — it is the absence of an answer, and
@@ -5183,7 +5199,7 @@ def kube_can_i(binary, verb, resource, namespace, timeout):
     return None
 
 
-def kube_rbac_factors(binary, args, timeout=KUBE_TIMEOUT_DEFAULT):
+def kube_rbac_factors(binary: str, args: list[str], timeout: float = KUBE_TIMEOUT_DEFAULT) -> list[FactorTuple]:
     """Fold the cluster's own answer in as scoring factors.
 
     Returns a list of factor tuples. Empty means "nothing to say", which is
@@ -5253,10 +5269,7 @@ def kube_rbac_factors(binary, args, timeout=KUBE_TIMEOUT_DEFAULT):
     return [
         (
             0,
-            (
-                f"{RBAC}context `{ctx}` may {rbac_verb} {rbac_res}{where} — "
-                f"`kubectl auth can-i` says yes"
-            ),
+            (f"{RBAC}context `{ctx}` may {rbac_verb} {rbac_res}{where} — `kubectl auth can-i` says yes"),
             None,
             None,
             "RBAC-PERMITTED",
@@ -5264,9 +5277,9 @@ def kube_rbac_factors(binary, args, timeout=KUBE_TIMEOUT_DEFAULT):
     ]
 
 
-def path_factors(binary, args):
+def path_factors(binary: str, args: list[str]) -> list[FactorTuple]:
     """Score the *targets*. This is where rm and `rm /` part ways."""
-    out = []
+    out: list[FactorTuple] = []
     for a in args:
         if a.startswith("-") or ENV_ASSIGN.match(a) or "=" in a.split("/", 1)[0]:
             continue
@@ -5278,10 +5291,7 @@ def path_factors(binary, args):
                 out.append(
                     (
                         40,
-                        (
-                            f"if ${var} is unset or empty this expands to `/` — "
-                            f"the classic `rm -rf $DIR/` incident"
-                        ),
+                        (f"if ${var} is unset or empty this expands to `/` — the classic `rm -rf $DIR/` incident"),
                         "host",
                         "irreversible",
                     )
@@ -5290,10 +5300,7 @@ def path_factors(binary, args):
                 out.append(
                     (
                         22,
-                        (
-                            f"if ${var} is unset this expands to `{expanded}`, "
-                            f"not to the path you meant"
-                        ),
+                        (f"if ${var} is unset this expands to `{expanded}`, not to the path you meant"),
                         "host",
                         None,
                     )
@@ -5312,9 +5319,7 @@ def path_factors(binary, args):
             continue
         stripped = p.removesuffix("/*")
         if stripped in SYSTEM_DIRS:
-            out.append(
-                (35, f"target is `{stripped}` — {SYSTEM_DIRS[stripped]}", "host", "irreversible")
-            )
+            out.append((35, f"target is `{stripped}` — {SYSTEM_DIRS[stripped]}", "host", "irreversible"))
             continue
         if p in ("~", "$HOME", "${HOME}", "~/*", "$HOME/*"):
             out.append((28, "target is the user's home directory", "host", "irreversible"))
@@ -5335,23 +5340,18 @@ def path_factors(binary, args):
             out.append(
                 (
                     -25,
-                    (
-                        f"`{os.path.basename(p)}` is a regenerable build/dependency "
-                        f"directory, not source of truth"
-                    ),
+                    (f"`{Path(p).name}` is a regenerable build/dependency directory, not source of truth"),
                     None,
                     None,
                 )
             )
             continue
         if p.startswith("/dev/") and binary not in DEVICE_TARGET_EXPECTED:
-            out.append(
-                (45, f"target is a device node (`{p}`), not a regular file", "host", "irreversible")
-            )
+            out.append((45, f"target is a device node (`{p}`), not a regular file", "host", "irreversible"))
     return out
 
 
-def specific_clis():
+def specific_clis() -> list[str]:
     """The resource CLIs enumerated per resource rather than by verb.
 
     Derived from the rule set rather than listed, because docs/rules.md names
@@ -5362,12 +5362,12 @@ def specific_clis():
     return sorted(set(RESOURCE_CLIS.split()) & enumerated)
 
 
-def generic_clis():
+def generic_clis() -> list[str]:
     """The resource CLIs verb classification still carries on its own."""
     return sorted(set(RESOURCE_CLIS.split()) - set(specific_clis()))
 
 
-def pick_rule(binary, args_str):
+def pick_rule(binary: str, args_str: str) -> Entry | None:
     """Pick the rule that best describes a command, or None.
 
     Specificity wins before score does: a rule matching this exact
@@ -5375,17 +5375,26 @@ def pick_rule(binary, args_str):
     when the generic one would score higher. The classifier is the fallback,
     not a competitor.
     """
-    candidates = [
-        r for r in RULES if binary in r["bins"] and (r["sub"] is None or r["sub"].search(args_str))
-    ]
+    candidates = [r for r in RULES if binary in r["bins"] and (r["sub"] is None or r["sub"].search(args_str))]
     if not candidates:
         return None
     return max(candidates, key=lambda r: (not r["generic"], r["sub"] is not None, r["base"]))
 
 
-def _score_local_definition(
-    local, raw, binary, args, privileged, strict, introspect, depth, basedir, seen, defs, offset
-):
+def _score_local_definition(  # noqa: PLR0913,PLR0917 — the scorer's whole context, passed down one level
+    local: Definition,
+    raw: str,
+    binary: str,
+    args: list[str],
+    privileged: bool,
+    strict: bool,
+    introspect: bool,
+    depth: int,
+    basedir: str,
+    seen: set[str] | None,
+    defs: list[Definition] | None,
+    offset: int,
+) -> Result | None:
     """Score a call to a function or alias defined earlier in the same input.
 
     An alias is *expanded* — `k delete ns prod` is `kubectl delete ns prod`, and
@@ -5415,8 +5424,7 @@ def _score_local_definition(
             "factors": [
                 {
                     "points": 0,
-                    "why": f"`{binary}` is already being scored higher up "
-                    f"this call chain — recursion stops here",
+                    "why": f"`{binary}` is already being scored higher up this call chain — recursion stops here",
                     "keep": True,
                 }
             ],
@@ -5450,18 +5458,19 @@ def _score_local_definition(
         result["factors"] = [
             {
                 "points": 0,
-                "why": (
-                    f"{CARRIER_ALIAS}`{binary}` is `{local['value']}`, {site} "
-                    f"— scored as `{child['command']}`"
-                ),
+                "why": f"{CARRIER_ALIAS}`{binary}` is `{local['value']}`, {site} — scored as `{child['command']}`",
                 "rule": None,
                 "keep": True,
-            }
-        ] + list(child["factors"])
+            },
+            *list(child["factors"]),
+        ]
         return result
 
-    factors = [{"points": 0, "why": f"`{binary}` is a function {site}", "rule": None, "keep": True}]
-    scope, revert, advice, children = "none", "reversible", None, []
+    factors: list[Factor] = [{"points": 0, "why": f"`{binary}` is a function {site}", "rule": None, "keep": True}]
+    scope: str | None = "none"
+    revert: str | None = "reversible"
+    advice: str | None = None
+    children: list[Result] = []
     seen.add(key)
     try:
         inner = analyze(
@@ -5479,22 +5488,19 @@ def _score_local_definition(
         # script is ordinary, and a visited-set would report the second call as
         # recursion and score it zero.
         seen.discard(key)
-    worst = max(inner, key=lambda r: r["score"], default=None)
+    worst: Result | None = max(inner, key=lambda r: int(r["score"]), default=None)
     if worst and worst["score"]:
         children.append(worst)
         factors.append(
             {
                 "points": worst["score"],
-                "why": (
-                    f"{CARRIER_FUNCTION}`{binary}()` runs `{worst['command']}`, "
-                    f"which is {worst['level']}"
-                ),
+                "why": (f"{CARRIER_FUNCTION}`{binary}()` runs `{worst['command']}`, which is {worst['level']}"),
                 "rule": None,
                 "keep": True,
             }
         )
         scope, revert, advice = worst["scope"], worst["reversibility"], worst["advice"]
-    score = max(0, min(100, sum(f["points"] for f in factors)))
+    score = max(0, min(100, sum(int(f["points"]) for f in factors)))
     return {
         "command": raw.strip(),
         "rule": "CARRIER-FUNCTION",
@@ -5510,7 +5516,7 @@ def _score_local_definition(
     }
 
 
-def _factor(f):
+def _factor(f: FactorTuple) -> Factor:
     """One contributing factor, as it appears in output.
 
     `rule` names the rule or amplifier that produced it, so `scoville --why
@@ -5522,28 +5528,35 @@ def _factor(f):
     return {
         "points": points,
         "why": why,
-        "rule": f[4] if len(f) > 4 else None,
+        # The five-field form carries the id of the rule it came from; the
+        # four-field form is a path, a payload or a dampener, which has none.
+        "rule": tuple(f)[FACTOR_RULE_INDEX] if len(f) > FACTOR_RULE_INDEX else None,
         "keep": why.startswith((PAYLOAD, ENTRYPOINT, WRAPPER)),
     }
 
 
-def score_command(
-    raw,
-    tokens,
-    strict=False,
-    introspect=False,
-    depth=0,
-    basedir=".",
-    seen=None,
-    defs=None,
-    offset=0,
-    kube_timeout=KUBE_TIMEOUT_DEFAULT,
-):
-    """Score one command. Returns a result dict; recurses into payloads."""
+def score_command(  # noqa: PLR0912,PLR0913,PLR0915,PLR0917 — the decision table this tool exists to be
+    raw: str,
+    tokens: list[str],
+    strict: bool = False,
+    introspect: bool = False,
+    depth: int = 0,
+    basedir: str = ".",
+    seen: set[str] | None = None,
+    defs: list[Definition] | None = None,
+    offset: int = 0,
+    kube_timeout: float = KUBE_TIMEOUT_DEFAULT,
+) -> Result | None:
+    """Score one command, or None when there is no command left to score.
+
+    A line that is only wrappers and environment assignments -- `sudo` on its
+    own, `FOO=bar` -- reaches here with nothing to name, and there is no score
+    to give it.
+    """
     rest, privileged, wrappers = strip_prefix(tokens)
     if not rest:
         return None
-    binary = os.path.basename(rest[0])
+    binary = Path(rest[0]).name
     args = rest[1:]
     args_str = " ".join(args)
     if FUNC_DEF.match(binary):
@@ -5571,7 +5584,7 @@ def score_command(
     # Only under --introspect: resolving a carrier is what that flag means, and
     # the default path must keep scoring exactly what it is shown.
     local = definition_at(defs, binary, offset) if (introspect and defs) else None
-    if local and depth < 3:
+    if local and depth < MAX_CARRIER_DEPTH:
         resolved = _score_local_definition(
             local,
             raw,
@@ -5590,7 +5603,7 @@ def score_command(
             return resolved
 
     rule = pick_rule(binary, args_str)
-    factors = []
+    factors: list[FactorTuple] = []
     if rule:
         scope, revert, advice = rule["scope"], rule["revert"], rule["advice"]
         if rule["base"]:
@@ -5621,7 +5634,7 @@ def score_command(
                 )
             )
 
-    subsumed = rule["subsumes"] if rule else set()
+    subsumed: set[str] = rule["subsumes"] if rule else set()
     for amp in AMPS + SOFTENERS:
         if amp["bins"] and binary not in amp["bins"]:
             continue
@@ -5635,14 +5648,12 @@ def score_command(
         factors.extend(path_factors(binary, args))
 
     if privileged:
-        factors.append(
-            (15, f"`{wrappers[0]}`: runs as root — file permissions do not apply", "host", None)
-        )
+        factors.append((15, f"`{wrappers[0]}`: runs as root — file permissions do not apply", "host", None))
 
     # payload: docker exec / kubectl exec -- / ssh host / sh -c / ansible -a / find -exec
     payload, ctx, target = carried_command(binary, args)
-    children = []
-    if ctx and depth < 3:
+    children: list[Result] = []
+    if ctx and depth < MAX_CARRIER_DEPTH:
         weight, scope_floor, note = CONTEXTS[ctx]
         if payload:
             child = score_command(
@@ -5661,10 +5672,7 @@ def score_command(
                     factors.append(
                         (
                             10,
-                            (
-                                "applied to every path the walk matches, not to "
-                                "one argument you can read"
-                            ),
+                            ("applied to every path the walk matches, not to one argument you can read"),
                             None,
                             None,
                         )
@@ -5678,11 +5686,7 @@ def score_command(
                     )
                 )
         else:
-            info = (
-                introspect_target(ctx if ctx != "image" else "image", target)
-                if introspect
-                else None
-            )
+            info = introspect_target(ctx if ctx != "image" else "image", target) if introspect else None
             if info and info.get("resolved"):
                 entry = info["entrypoint"]
                 if entry:
@@ -5713,17 +5717,14 @@ def score_command(
                 factors.append(
                     (
                         20,
-                        (
-                            f"no explicit command: what runs is the image "
-                            f"ENTRYPOINT/CMD, not this line{extra}"
-                        ),
+                        (f"no explicit command: what runs is the image ENTRYPOINT/CMD, not this line{extra}"),
                         scope_floor,
                         None,
                     )
                 )
 
     kind, target = hidden_payload(binary, rest, rule)
-    if kind and depth < 3:
+    if kind and depth < MAX_CARRIER_DEPTH:
         seen = seen if seen is not None else set()
         key = f"{kind}:{target}"
         body = None
@@ -5739,7 +5740,7 @@ def score_command(
                 _depth=depth + 1,
                 _seen=seen,
             )
-            worst = max(inner, key=lambda r: r["score"], default=None)
+            worst: Result | None = max(inner, key=lambda r: int(r["score"]), default=None)
             if worst and worst["score"]:
                 children.append(worst)
                 factors.append(
@@ -5756,9 +5757,7 @@ def score_command(
         else:
             why = f"runs `{target}`: {WRAPPER_NOTE[kind]}"
             why += (
-                " — re-run with --introspect to read it"
-                if not introspect
-                else ", and it could not be read from here"
+                " — re-run with --introspect to read it" if not introspect else ", and it could not be read from here"
             )
             factors.append((20, why, None, None))
 
@@ -5806,10 +5805,20 @@ def score_command(
 
 SCRIPT_EXT = (".sh", ".bash", ".zsh", ".ksh", ".py", ".rb", ".pl")
 RUNNERS = {"make", "gmake", "npm", "yarn", "pnpm", "just", "task", "mise", "rake", "invoke"}
+# A rule scoring at or above this is in the top band, whatever its modifiers.
+TOP_BAND_BASE = 35
+# A factor tuple carries (points, why, ..., rule) -- the rule id is the fifth.
+FACTOR_RULE_INDEX = 4
+# How far a carrier chain is followed before it is called a loop: docker exec
+# into a script that runs make that runs a script is already three.
+MAX_CARRIER_DEPTH = 3
+
 MAX_SCRIPT_BYTES = 256 * 1024
 
 
-def hidden_payload(binary, rest, rule):
+def hidden_payload(  # noqa: PLR0911 — one arm per carrier shape
+    binary: str, rest: list[str], rule: Entry | None
+) -> tuple[str | None, str | None]:
     """A wrapper whose contents this command line does not show.
 
     Same shape as an image ENTRYPOINT: the risk is real, it is just not
@@ -5842,23 +5851,23 @@ def hidden_payload(binary, rest, rule):
     return None, None
 
 
-def _read(path, basedir):
+def _read(path: str, basedir: str) -> str | None:
     """Read a referenced payload file, or None if it cannot be read safely.
 
     Size-capped at MAX_SCRIPT_BYTES: a command that points at a multi-megabyte
     file is not worth stalling a pre-commit hook over.
     """
     try:
-        p = os.path.join(basedir, path) if not os.path.isabs(path) else path
-        if os.path.getsize(p) > MAX_SCRIPT_BYTES:
+        p = str(Path(basedir) / path) if not Path(path).is_absolute() else path
+        if Path(p).stat().st_size > MAX_SCRIPT_BYTES:
             return None
-        with open(p, encoding="utf-8", errors="replace") as fh:
+        with Path(p).open(encoding="utf-8", errors="replace") as fh:
             return fh.read()
     except OSError:
         return None
 
 
-def _make_recipe(target, basedir):
+def _make_recipe(target: str | None, basedir: str) -> str | None:
     """Return the recipe lines of one Make target, or None.
 
     A deliberately shallow read — tab-indented lines until the next
@@ -5866,11 +5875,14 @@ def _make_recipe(target, basedir):
     expansion and no includes: what it cannot resolve it leaves alone rather
     than guessing at a command that was never going to run.
     """
+    if target is None:
+        return None
     for name in ("Makefile", "makefile", "GNUmakefile"):
         text = _read(name, basedir)
         if text is None:
             continue
-        lines, collecting = [], False
+        lines: list[str] = []
+        collecting = False
         for line in text.splitlines():
             if re.match(rf"^{re.escape(target)}\s*:(?!=)", line):
                 collecting = True
@@ -5885,7 +5897,7 @@ def _make_recipe(target, basedir):
     return None
 
 
-def _npm_script(name, basedir):
+def _npm_script(name: str, basedir: str) -> str | None:
     """Return the body of one npm script from package.json, or None."""
     text = _read("package.json", basedir)
     if not text:
@@ -5896,7 +5908,7 @@ def _npm_script(name, basedir):
         return None
 
 
-def resolve_payload(kind, target, basedir):
+def resolve_payload(kind: str, target: str | None, basedir: str) -> str | None:
     """Read what the wrapper actually runs. Read-only, and never executes it."""
     if not target:
         return None
@@ -5920,11 +5932,11 @@ WRAPPER_NOTE = {
 FORKBOMB = re.compile(r":\s*\(\s*\)\s*\{.*\|.*&.*\}\s*;\s*:")
 
 
-def _track_downloads(raw, downloaded):
+def _track_downloads(raw: str, downloaded: set[str]) -> None:
     """Remember paths a fetcher wrote, so executing them later can be spotted."""
     tokens = tokenize(raw)
     rest, _, _ = strip_prefix(tokens)
-    if not rest or os.path.basename(rest[0]) not in FETCHERS:
+    if not rest or Path(rest[0]).name not in FETCHERS:
         return
     for i, tok in enumerate(rest[1:], 1):
         if tok in ("-o", "-O", "--output", ">") and i + 1 < len(rest):
@@ -5933,7 +5945,7 @@ def _track_downloads(raw, downloaded):
             downloaded.add(tok.split("=", 1)[1])
 
 
-def _flag_deferred_exec(result, raw, downloaded):
+def _flag_deferred_exec(result: Result, raw: str, downloaded: set[str]) -> None:
     """`curl -o f URL && bash f` is the pipe with a file in the middle."""
     if not downloaded:
         return
@@ -5941,11 +5953,11 @@ def _flag_deferred_exec(result, raw, downloaded):
     rest, _, _ = strip_prefix(tokens)
     if not rest:
         return
-    binary = os.path.basename(rest[0])
+    binary = Path(rest[0]).name
     hit = None
     if binary in INTERPRETERS:
         hit = next((a for a in rest[1:] if a in downloaded), None)
-    elif rest[0] in downloaded or f"./{os.path.basename(rest[0])}" in downloaded:
+    elif rest[0] in downloaded or f"./{Path(rest[0]).name}" in downloaded:
         hit = rest[0]
     if not hit:
         return
@@ -5956,8 +5968,7 @@ def _flag_deferred_exec(result, raw, downloaded):
     result["factors"].append(
         {
             "points": 70,
-            "why": f"executes `{hit}`, which was downloaded earlier in this same snippet: "
-            f"nothing read it in between",
+            "why": f"executes `{hit}`, which was downloaded earlier in this same snippet: nothing read it in between",
             "keep": True,
         }
     )
@@ -5972,16 +5983,16 @@ def _flag_deferred_exec(result, raw, downloaded):
 
 
 def analyze(
-    text,
-    strict=False,
-    introspect=False,
-    basedir=".",
-    _depth=0,
-    _seen=None,
-    _defs=None,
-    _at=None,
-    kube_timeout=KUBE_TIMEOUT_DEFAULT,
-):
+    text: str,
+    strict: bool = False,
+    introspect: bool = False,
+    basedir: str = ".",
+    _depth: int = 0,
+    _seen: set[str] | None = None,
+    _defs: list[Definition] | None = None,
+    _at: int | None = None,
+    kube_timeout: float = KUBE_TIMEOUT_DEFAULT,
+) -> list[Result]:
     """Analyze a snippet; returns one result per command, in execution order.
 
     `_defs` carries the enclosing text's function and alias definitions into a
@@ -5991,7 +6002,7 @@ def analyze(
     point because bash resolves a name when the line runs, so a helper defined
     below the one that calls it is still in scope.
     """
-    results = []
+    results: list[Result] = []
     defs = _defs if _defs is not None else (collect_definitions(text) if introspect else [])
     if FORKBOMB.search(text):
         results.append(
@@ -6010,15 +6021,15 @@ def analyze(
                 "factors": [
                     {
                         "points": 100,
-                        "why": "fork bomb: recursively spawns processes until the "
-                        "kernel's process table is exhausted",
+                        "why": "fork bomb: recursively spawns processes until the kernel's process table is exhausted",
                     }
                 ],
             }
         )
         return results
 
-    prev, downloaded = None, set()
+    prev: Result | None = None
+    downloaded: set[str] = set()
     for raw, offset, op in split_commands(text):
         line = text.count("\n", 0, offset) + 1
         for inner, ioff in subshell_commands(raw, offset):
@@ -6055,8 +6066,8 @@ def analyze(
         r["line"] = line
         # curl … | sh — the pipe is the whole risk, and neither half shows it
         if op == "|" and prev:
-            binary = os.path.basename(strip_prefix(tokenize(raw))[0][0]) if tokenize(raw) else ""
-            src = os.path.basename(strip_prefix(tokenize(prev["command"]))[0][0])
+            binary = Path(strip_prefix(tokenize(raw))[0][0]).name if tokenize(raw) else ""
+            src = Path(strip_prefix(tokenize(prev["command"]))[0][0]).name
             if binary in INTERPRETERS and src in FETCHERS:
                 r["factors"].append(
                     {
@@ -6070,9 +6081,7 @@ def analyze(
                 r["level"] = band(r["score"])
                 r["scope"] = widest(r["scope"], "host")
                 r["reversibility"] = "irreversible"
-                r["advice"] = (
-                    "download, read, then run: `curl -fsSL URL -o s.sh && less s.sh && sh s.sh`"
-                )
+                r["advice"] = "download, read, then run: `curl -fsSL URL -o s.sh && less s.sh && sh s.sh`"
         _track_downloads(raw, downloaded)
         _flag_deferred_exec(r, raw, downloaded)
         results.append(r)
@@ -6094,7 +6103,7 @@ PEPPERS = {
 SCALES = ("bands", "peppers")
 
 
-def label(level, scale, slug=False):
+def label(level: str, scale: str, slug: bool = False) -> str:
     """The display name for a level on the chosen scale."""
     if scale != "peppers":
         return level if slug else level.upper()
@@ -6108,19 +6117,21 @@ MARKS = {"safe": "ok", "low": "· ", "medium": "! ", "high": "!!", "critical": "
 COLORS = {"safe": "32", "low": "36", "medium": "33", "high": "31", "critical": "1;31"}
 
 
-def paint(text, level, on):
+def paint(text: str, level: str, on: bool) -> str:
     """Colour text for a level, or hand it back untouched when `on` is false."""
     return f"\033[{COLORS[level]}m{text}\033[0m" if on else text
 
 
-def render_text(results, source=None, color=False, verbose=False, scale="bands"):
+def render_text(
+    results: list[Result], source: str | None = None, color: bool = False, verbose: bool = False, scale: str = "bands"
+) -> str:
     """Render the human-readable report: one block per command.
 
     Zero-weight factors are hidden unless `verbose`, or unless the command
     scored 0 — a safe command with nothing listed under it reads as a tool
     that failed to run, rather than as a verdict.
     """
-    lines = []
+    lines: list[str] = []
     width = 10 if scale == "bands" else 25
     for r in results:
         where = f"{source}:{r['line']}: " if source else ""
@@ -6151,9 +6162,9 @@ def render_text(results, source=None, color=False, verbose=False, scale="bands")
     return "\n".join(lines)
 
 
-def public(results):
+def public(results: list[Result]) -> list[Result]:
     """Drop internal render hints before serialising."""
-    out = []
+    out: list[Result] = []
     for r in results:
         clean = {k: v for k, v in r.items() if k != "carries"}
         clean["factors"] = [{k: v for k, v in f.items() if k != "keep"} for f in r["factors"]]
@@ -6162,7 +6173,7 @@ def public(results):
     return out
 
 
-def overall(results):
+def overall(results: list[Result]) -> Result:
     """Collapse a run into one verdict.
 
     Not an average: the worst score, the widest scope and the least
@@ -6212,26 +6223,26 @@ class ConfigError(Exception):
     force."""
 
 
-def find_config(basedir):
+def find_config(basedir: str) -> str | None:
     """The nearest `.scovillerc` at or above `basedir`, or None.
 
     Walking up means a repo-root config covers every subdirectory, which is
     where the file belongs — risk is a property of the repository, not of the
     directory you happened to run from.
     """
-    here = os.path.abspath(basedir)
+    here = str(Path(basedir).resolve())
     while True:
         for name in CONFIG_NAMES:
-            candidate = os.path.join(here, name)
-            if os.path.isfile(candidate):
+            candidate = str(Path(here) / name)
+            if Path(candidate).is_file():
                 return candidate
-        parent = os.path.dirname(here)
+        parent = str(Path(here).parent)
         if parent == here:
             return None
         here = parent
 
 
-def load_config(path):
+def load_config(path: str) -> list[Override]:
     """Parse and validate a config file into a list of override entries.
 
     JSON, not TOML. `tomllib` is 3.11+ and scoville supports 3.10, and the two
@@ -6241,7 +6252,7 @@ def load_config(path):
     floor ever moves.
     """
     try:
-        with open(path, encoding="utf-8") as fh:
+        with Path(path).open(encoding="utf-8") as fh:
             data = json.load(fh)
     except OSError as e:
         raise ConfigError(f"{path}: {e}") from e
@@ -6249,47 +6260,47 @@ def load_config(path):
         raise ConfigError(f"{path}: not valid JSON: {e}") from e
     if not isinstance(data, dict):
         raise ConfigError(f"{path}: expected an object with allow/deny/rescore keys")
+    # json.load only ever produces str keys; the cast says what it cannot.
+    config = cast("dict[str, Any]", data)
 
-    unknown = set(data) - set(OVERRIDE_ACTIONS)
+    unknown = set(config) - set(OVERRIDE_ACTIONS)
     if unknown:
         raise ConfigError(
-            f"{path}: unknown key(s) {', '.join(sorted(unknown))}; "
-            f"expected {', '.join(OVERRIDE_ACTIONS)}"
+            f"{path}: unknown key(s) {', '.join(sorted(unknown))}; expected {', '.join(OVERRIDE_ACTIONS)}"
         )
 
-    entries = []
+    entries: list[Override] = []
     # Deny first, then rescore, then allow: a deny is a statement that the
     # command is never acceptable here, and it has to survive an allow written
     # by someone who did not know about it.
     for action in OVERRIDE_ACTIONS:
-        for i, raw in enumerate(data.get(action) or []):
+        rules: list[Any] = config.get(action) or []
+        for i, raw in enumerate(rules):
             where = f"{path}: {action}[{i}]"
             if not isinstance(raw, dict):
                 raise ConfigError(f"{where}: expected an object with `match` and `why`")
-            match = raw.get("match")
-            why = raw.get("why")
+            rule = cast("dict[str, Any]", raw)
+            match = rule.get("match")
+            why = rule.get("why")
             if not match or not isinstance(match, str):
                 raise ConfigError(f"{where}: needs a `match` glob")
             # An override with no stated reason is how a config file becomes a
             # list nobody can safely delete from.
             if not why or not isinstance(why, str):
                 raise ConfigError(
-                    f"{where}: needs a `why` — an unexplained override "
-                    f"is one nobody can safely remove later"
+                    f"{where}: needs a `why` — an unexplained override is one nobody can safely remove later"
                 )
-            entry = {"action": action, "match": match, "why": why, "source": path}
+            entry: Override = {"action": action, "match": match, "why": why, "source": path}
             if action == "rescore":
-                level = raw.get("level")
+                level = rule.get("level")
                 if level not in LEVELS:
-                    raise ConfigError(
-                        f"{where}: `level` must be one of {', '.join(LEVELS)}, got {level!r}"
-                    )
+                    raise ConfigError(f"{where}: `level` must be one of {', '.join(LEVELS)}, got {level!r}")
                 entry["level"] = level
             entries.append(entry)
     return entries
 
 
-def match_override(entries, command):
+def match_override(entries: list[Entry], command: str) -> Entry | None:
     """The first entry whose glob matches `command`, or None.
 
     Globs, not regexes. A glob is reviewable at a glance in a file that governs
@@ -6302,7 +6313,7 @@ def match_override(entries, command):
     return None
 
 
-def apply_overrides(results, entries):
+def apply_overrides(results: list[Result], entries: list[Entry]) -> list[Result]:
     """Apply config overrides in place, recording each one in the factor trace.
 
     A suppressed finding still appears, with its original score. Silent
@@ -6320,21 +6331,14 @@ def apply_overrides(results, entries):
         was = r["level"]
         if entry["action"] == "deny":
             r["score"], r["level"] = 100, "critical"
-            note = f"denied by {os.path.basename(entry['source'])}: {entry['why']}"
+            note = f"denied by {Path(entry['source']).name}: {entry['why']}"
         elif entry["action"] == "rescore":
             r["level"] = entry["level"]
             r["score"] = SCORE_FOR_LEVEL[entry["level"]]
-            moved = (
-                f"re-scored {was} → {entry['level']}"
-                if was != entry["level"]
-                else f"pinned at {entry['level']}"
-            )
-            note = f"{moved} by {os.path.basename(entry['source'])}: {entry['why']}"
+            moved = f"re-scored {was} → {entry['level']}" if was != entry["level"] else f"pinned at {entry['level']}"
+            note = f"{moved} by {Path(entry['source']).name}: {entry['why']}"
         else:
-            note = (
-                f"allowed by {os.path.basename(entry['source'])}: {entry['why']} "
-                f"(scored {was}, does not trip --fail-on)"
-            )
+            note = f"allowed by {Path(entry['source']).name}: {entry['why']} (scored {was}, does not trip --fail-on)"
         r["factors"].append({"points": 0, "why": note, "keep": True})
         apply_overrides(r.get("carries", []), entries)
     return results
@@ -6345,12 +6349,19 @@ def apply_overrides(results, entries):
 SCORE_FOR_LEVEL = {"safe": 0, "low": 15, "medium": 35, "high": 60, "critical": 85}
 
 
-def gated(results):
+def gated(results: list[Result]) -> list[Result]:
     """Results that --fail-on considers: everything not explicitly allowed."""
-    return [r for r in results if (r.get("override") or {}).get("action") != "allow"]
+
+    def allowed(r: Result) -> bool:
+        override: Override = r.get("override") or {}
+        return override.get("action") == "allow"
+
+    return [r for r in results if not allowed(r)]
 
 
-def main(argv=None):
+def main(  # noqa: PLR0911,PLR0912,PLR0915 — argument handling: one arm per flag, one exit code per failure
+    argv: list[str] | None = None,
+) -> int:
     """CLI entry point. Returns the process exit status.
 
     0 when the run completed, 1 when --fail-on is reached, 64 (EX_USAGE) when
@@ -6375,9 +6386,7 @@ def main(argv=None):
         "(bell pepper..carolina reaper). Text output only",
     )
     p.add_argument("--fail-on", choices=LEVELS, help="exit 1 when any command reaches this level")
-    p.add_argument(
-        "--strict", action="store_true", help="treat unrecognised commands as medium risk"
-    )
+    p.add_argument("--strict", action="store_true", help="treat unrecognised commands as medium risk")
     p.add_argument(
         "--introspect",
         action="store_true",
@@ -6403,17 +6412,14 @@ def main(argv=None):
     p.add_argument(
         "--config",
         metavar="PATH",
-        help="override file (default: nearest .scovillerc at or above the "
-        "analysed file's directory)",
+        help="override file (default: nearest .scovillerc at or above the analysed file's directory)",
     )
     p.add_argument(
         "--no-config",
         action="store_true",
         help="ignore any .scovillerc that would otherwise be discovered",
     )
-    p.add_argument(
-        "--list-rules", action="store_true", help="print every rule and amplifier, then exit"
-    )
+    p.add_argument("--list-rules", action="store_true", help="print every rule and amplifier, then exit")
     p.add_argument(
         "--why",
         metavar="RULE",
@@ -6426,18 +6432,18 @@ def main(argv=None):
     if args.why:
         text = why_text(args.why)
         if text is None:
-            print(f"scoville: no rule or amplifier called {args.why!r}", file=sys.stderr)
+            # The tool's output
+            print(f"scoville: no rule or amplifier called {args.why!r}", file=sys.stderr)  # noqa: T201
             # A near miss is the common case — an id read off a finding with a
             # typo, or half remembered. Guessing is cheaper than --list-rules.
-            near = difflib.get_close_matches(
-                args.why.strip().lstrip("+").upper(), rule_ids(), n=3, cutoff=0.5
-            )
+            wanted: str = str(args.why).strip().lstrip("+").upper()
+            near = difflib.get_close_matches(wanted, rule_ids(), n=3, cutoff=0.5)
             if near:
-                print(f"scoville: did you mean {', '.join(near)}?", file=sys.stderr)
+                print(f"scoville: did you mean {', '.join(near)}?", file=sys.stderr)  # noqa: T201 — the tool's output
             else:
-                print("scoville: --list-rules prints every id", file=sys.stderr)
+                print("scoville: --list-rules prints every id", file=sys.stderr)  # noqa: T201 — the tool's output
             return 64
-        print(text, end="")
+        print(text, end="")  # noqa: T201 — the tool's output
         return 0
 
     if args.list_rules:
@@ -6445,19 +6451,19 @@ def main(argv=None):
             if not r["bins"]:
                 continue
             bins = ", ".join(sorted(r["bins"])[:6])
-            print(f"{r['id']:<18} {r['base']:>3}  {bins}: {r['why']}")
+            print(f"{r['id']:<18} {r['base']:>3}  {bins}: {r['why']}")  # noqa: T201 — the tool's output
         for a in AMPS:
             bins = ", ".join(sorted(a["bins"])[:4]) if a["bins"] else "any"
-            print(f"{'+' + a['id']:<18} {a['points']:>+3}  {bins}: {a['why']}")
+            print(f"{'+' + a['id']:<18} {a['points']:>+3}  {bins}: {a['why']}")  # noqa: T201 — the tool's output
         return 0
 
     source = None
     if args.file:
         try:
-            with open(args.file, encoding="utf-8", errors="replace") as fh:
+            with Path(args.file, encoding="utf-8", errors="replace").open() as fh:
                 text = fh.read()
         except OSError as e:
-            print(f"scoville: {e}", file=sys.stderr)
+            print(f"scoville: {e}", file=sys.stderr)  # noqa: T201 — the tool's output
             return 64
         source = args.file
     elif args.command and args.command != ["-"]:
@@ -6469,25 +6475,25 @@ def main(argv=None):
         return 64
 
     if not text.strip():
-        print("scoville: nothing to analyze", file=sys.stderr)
+        print("scoville: nothing to analyze", file=sys.stderr)  # noqa: T201 — the tool's output
         return 64
 
-    basedir = os.path.dirname(os.path.abspath(args.file)) if args.file else os.getcwd()
+    basedir = str(Path(args.file).resolve().parent) if args.file else str(Path.cwd())
 
     # An explicit --config that does not exist is an error, not a shrug: the
     # caller asked for a policy and running without it would silently apply a
     # different one than they think.
-    entries = []
+    entries: list[Override] = []
     if not args.no_config:
         config_path = args.config or find_config(basedir)
-        if args.config and not os.path.isfile(args.config):
-            print(f"scoville: {args.config}: no such file", file=sys.stderr)
+        if args.config and not Path(args.config).is_file():
+            print(f"scoville: {args.config}: no such file", file=sys.stderr)  # noqa: T201 — the tool's output
             return 64
         if config_path:
             try:
                 entries = load_config(config_path)
             except ConfigError as e:
-                print(f"scoville: {e}", file=sys.stderr)
+                print(f"scoville: {e}", file=sys.stderr)  # noqa: T201 — the tool's output
                 return 64
 
     results = apply_overrides(
@@ -6504,18 +6510,19 @@ def main(argv=None):
 
     if args.format == "json":
         json.dump({"overall": summary, "commands": public(results)}, sys.stdout, indent=2)
-        print()
+        print()  # noqa: T201 — the tool's output
     elif args.quiet:
         for r in results:
-            print(f"{label(r['level'], args.scale, slug=True):<15} {r['score']:>3}  {r['command']}")
+            # The tool's output
+            print(f"{label(r['level'], args.scale, slug=True):<15} {r['score']:>3}  {r['command']}")  # noqa: T201
     else:
         color = not args.no_color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
         out = render_text(results, source, color, args.verbose, args.scale)
         if out:
-            print(out, end="")
+            print(out, end="")  # noqa: T201 — the tool's output
         plural = "" if summary["commands"] == 1 else "s"
         heat = f" ({PEPPERS[summary['level']][3]})" if args.scale == "peppers" else ""
-        print(
+        print(  # noqa: T201 — the tool's output
             f"scoville: {summary['commands']} command{plural}, worst "
             f"{paint(label(summary['level'], args.scale), summary['level'], color)}{heat} "
             f"{summary['score']}/100 · scope {summary['scope']} · {summary['reversibility']}"

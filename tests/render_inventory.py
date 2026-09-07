@@ -39,7 +39,7 @@ def rows():
             yield section, level.strip(), command.strip()
 
 
-def main():
+def main() -> None:
     out = [HEADER]
     counts = dict.fromkeys(LEVELS, 0)
     total = 0
@@ -55,10 +55,7 @@ def main():
         counts[level] += 1
         total += 1
         cmd = command.replace("|", "\\|")
-        body.append(
-            f"| `{level}` {worst['score']} | `{cmd}` | {worst['scope']} "
-            f"| {worst['reversibility']} |"
-        )
+        body.append(f"| `{level}` {worst['score']} | `{cmd}` | {worst['scope']} | {worst['reversibility']} |")
 
     summary = " · ".join(f"**{n}** {lvl}" for lvl, n in counts.items() if n)
     out.append(f"{total} commands catalogued: {summary}.\n")

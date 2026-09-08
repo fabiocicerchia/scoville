@@ -3,7 +3,9 @@
   "packages": {
     ".": {
       "release-type": "python",
-      "extra-files": ["scoville.py"]
+      "extra-files": [
+        "scoville/version.py"
+      ]
     }
   },
   "draft": true

@@ -6,6 +6,8 @@ from typing import Any, NoReturn
 import pytest
 
 import scoville
+import scoville.introspection
+import scoville.kube
 from scoville import (
     INCIDENTS,
     RULES,
@@ -309,10 +311,9 @@ def test_list_rules(capsys: pytest.CaptureFixture[str]) -> None:
 
 
 def test_introspect_resolves_a_dangerous_entrypoint(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(scoville, "shutil", scoville.shutil)
-    monkeypatch.setattr(scoville.shutil, "which", _fake_which("/usr/bin/docker"))
+    monkeypatch.setattr(scoville.introspection.shutil, "which", _fake_which("/usr/bin/docker"))
     monkeypatch.setattr(
-        scoville,
+        scoville.introspection,
         "_docker",
         _fake_docker('["/bin/sh","-c","rm -rf /data"]|null|root|sha256:x'),
     )
@@ -323,15 +324,15 @@ def test_introspect_resolves_a_dangerous_entrypoint(monkeypatch: pytest.MonkeyPa
 
 
 def test_introspect_reports_when_it_cannot_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(scoville.shutil, "which", _fake_which("/usr/bin/docker"))
-    monkeypatch.setattr(scoville, "_docker", _fake_docker(None))
+    monkeypatch.setattr(scoville.introspection.shutil, "which", _fake_which("/usr/bin/docker"))
+    monkeypatch.setattr(scoville.introspection, "_docker", _fake_docker(None))
     r = one("docker run acme/cleaner:1.0", introspect=True)
     assert any("cannot inspect" in f["why"] for f in r["factors"])
     assert r["level"] == "medium"
 
 
 def test_introspect_without_docker_says_so(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(scoville.shutil, "which", _fake_which(None))
+    monkeypatch.setattr(scoville.introspection.shutil, "which", _fake_which(None))
     r = one("docker run acme/cleaner:1.0", introspect=True)
     assert any("no docker CLI" in f["why"] for f in r["factors"])
 
@@ -340,7 +341,7 @@ def test_introspection_is_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
     def boom(*_args: object, **_kwargs: object) -> NoReturn:
         raise AssertionError("scoville shelled out without --introspect")
 
-    monkeypatch.setattr(scoville, "_docker", boom)
+    monkeypatch.setattr(scoville.introspection, "_docker", boom)
     assert level("docker run acme/cleaner:1.0") == "medium"
 
 
@@ -1216,7 +1217,7 @@ class FakeKubectl:
 def kubectl(monkeypatch: pytest.MonkeyPatch) -> Callable[[dict[str, str]], FakeKubectl]:
     def install(answers: dict[str, str]) -> FakeKubectl:
         fake = FakeKubectl(answers)
-        monkeypatch.setattr(scoville, "_kubectl", fake)
+        monkeypatch.setattr(scoville.kube, "_kubectl", fake)
         return fake
 
     return install

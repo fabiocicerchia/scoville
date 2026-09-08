@@ -59,3 +59,7 @@ def harder(a: str, b: str) -> str:
     """Return the less recoverable of two verdicts — reversibility only ever
     gets worse as factors accumulate."""
     return a if REVERT.index(a) >= REVERT.index(b) else b
+
+
+# A rule scoring at or above this is in the top band, whatever its modifiers.
+TOP_BAND_BASE = 35

@@ -1,0 +1,115 @@
+.TH SCOVILLE 1 "2026-09" "scoville" "User Commands"
+.SH NAME
+scoville \- rate how dangerous a shell command is, before you run it
+.SH SYNOPSIS
+.B scoville
+.RI [ command ...]
+.RI [ options ]
+.SH DESCRIPTION
+Scores commands by how much damage they could do, on a named scale, with
+the reasoning shown: which rule fired, and which amplifiers (a wildcard, a
+production context, sudo) multiplied it.
+.PP
+Commands come from the arguments, from a script with
+.BR \-\-file ,
+or from standard input with
+.BR \- .
+.SH OPTIONS
+.TP
+.BI \-f " FILE" ", " \-\-file " FILE"
+Analyse a script file.
+.TP
+.BI \-\-format " FORMAT"
+.B text
+for humans,
+.B json
+for anything downstream (default text).
+.TP
+.BI \-\-scale " SCALE"
+How to name the levels:
+.B bands
+(safe to critical) or
+.B peppers
+(bell pepper to carolina reaper). Text output only.
+.TP
+.BI \-\-fail\-on " LEVEL"
+Exit 1 when any command reaches this level.
+.TP
+.B \-\-strict
+Treat unrecognised commands as medium risk.
+.TP
+.B \-\-introspect
+Resolve hidden image and container entrypoints via a read-only
+.BR "docker inspect" ,
+and ask the current Kubernetes context what it is allowed to do.
+.TP
+.BI \-\-kube\-timeout " SEC"
+Bound on one
+.B "kubectl auth can-i"
+call under
+.BR \-\-introspect .
+A timeout scores as if it had not been asked.
+.TP
+.BR \-q ", " \-\-quiet
+One line per command.
+.TP
+.BR \-v ", " \-\-verbose
+Show zero-weight factors too.
+.TP
+.B \-\-no\-color
+Never colourise. A non-tty and
+.I NO_COLOR
+already disable it.
+.TP
+.BI \-\-config " PATH"
+Override file. The default is the nearest
+.I .scovillerc
+at or above the analysed file's directory.
+.TP
+.B \-\-no\-config
+Ignore any
+.I .scovillerc
+that would otherwise be discovered.
+.TP
+.B \-\-list\-rules
+Print every rule and amplifier, then exit.
+.TP
+.BI \-\-why " RULE"
+Print the long form for one rule or amplifier id, then exit.
+.SH FILES
+.TP
+.I .scovillerc
+Per-project overrides, discovered upwards from the analysed file.
+.SH EXIT STATUS
+.TP
+.B 0
+Scored; no command reached
+.BR \-\-fail\-on .
+.TP
+.B 1
+A command reached
+.BR \-\-fail\-on .
+.SH EXAMPLES
+.PP
+Score one command:
+.PP
+.RS
+.B scoville 'rm -rf /var/lib/data'
+.RE
+.PP
+Gate a runbook:
+.PP
+.RS
+.B scoville \-f deploy.sh \-\-fail\-on high
+.RE
+.PP
+Explain a rule:
+.PP
+.RS
+.B scoville \-\-why SC-014
+.RE
+.SH SEE ALSO
+.BR shellcheck (1).
+Project documentation:
+.UR https://github.com/fabiocicerchia/scoville
+.UE

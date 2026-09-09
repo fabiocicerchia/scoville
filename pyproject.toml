@@ -23,7 +23,7 @@ dev = ["pytest", "ruff", "build", "basedpyright>=1.31"]
 scoville = "scoville:main"
 
 [tool.setuptools]
-py-modules = ["scoville"]
+packages = ["scoville"]
 
 [tool.ruff]
 line-length = 120

@@ -45,7 +45,12 @@ footer{margin-top:2.2rem;color:#5c6684;font-size:.82rem}
 <div class="card">
   <h1>🌶 scoville</h1>
   <p class="tagline">Risk posture for shell commands: score, blast radius and reversibility before you run them.</p>
-  <p class="desc">A Scoville scale for your terminal: how spicy is this command, and what does it burn? Risk is a property of <code>binary + flags + target + context</code> — <code>rm</code> is bad, <code>rm -rf</code> is worse, <code>rm -rf /</code> is unrecoverable. scoville scores that escalation instead of pattern-matching a deny-list, and shows every factor that contributed so you can disagree with it.</p>
+  <p class="desc">
+    A Scoville scale for your terminal: how spicy is this command, and what does it burn? Risk is a property of
+    <code>binary + flags + target + context</code> — <code>rm</code> is bad, <code>rm -rf</code> is worse, <code>rm -rf
+    /</code> is unrecoverable. scoville scores that escalation instead of pattern-matching a deny-list, and shows every
+    factor that contributed so you can disagree with it.
+  </p>
   <div class="install-label">Install</div>
   <pre><code>pipx install git+https://github.com/fabiocicerchia/scoville</code></pre>
   <p class="alt">or, from a clone: <code>pipx install .</code></p>

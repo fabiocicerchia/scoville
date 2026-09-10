@@ -1,3 +1,4 @@
+# Managed centrally — edit the shared config, not this copy.
 #
 # One `common` overlay covers public and private repos alike; the job below
 # guards itself instead of the overlay tree branching. OpenSSF Scorecard only

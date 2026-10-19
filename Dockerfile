@@ -1,7 +1,7 @@
 # Multi-stage build for the scoville CLI.
 
 # --- build stage ---
-FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6 AS build
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS build
 WORKDIR /src
 COPY . .
 # The build backend comes from a hash-pinned lockfile and isolation is off, so
@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir --require-hashes -r requirements-build.txt \
  && pip wheel --no-cache-dir --no-build-isolation --no-deps -w dist .
 
 # --- runtime stage ---
-FROM python:3.14-slim@sha256:cad9a2c871761c413caa6fdd6441c783451e740a48aaeba60ae62a8b53525ef6
+FROM python:3.14-slim@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 WORKDIR /app
 # Run as non-root.
 RUN useradd -u 10001 -m app

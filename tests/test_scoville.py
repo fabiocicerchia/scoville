@@ -1065,7 +1065,7 @@ def test_docs_name_the_same_enumerated_clis_the_rule_set_does() -> None:
     # enumerated it. Read the two lists back out of docs/rules.md.
     text = (Path(__file__).resolve().parent.parent / "docs" / "rules.md").read_text()
     section = text.split("**Enumerated per resource**", 1)[1].split("**Carried by verb classification**", 1)[0]
-    documented = {name for name in re.findall(r"`([^`]+)`", section) for name in name.split("/")}
+    documented = {cli for entry in re.findall(r"`([^`]+)`", section) for cli in entry.split("/")}
     resource = set(RESOURCE_CLIS.split())
     assert documented & resource == set(specific_clis())
 

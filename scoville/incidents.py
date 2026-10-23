@@ -746,8 +746,7 @@ INCIDENTS = {
         "considers the droplet protected finds there is nothing to restore "
         "from. Only snapshots outlive a droplet, so the safe order is "
         "`droplet-action snapshot --snapshot-name <name> --wait`, then delete. "
-        "`--tag-name` turns one "
-        "droplet into however many carry that tag today."
+        "`--tag-name` turns one droplet into however many carry that tag today."
     ),
     "DO-DROPLET-REBUILD": (
         "The verb that lies. Rebuild keeps the droplet's ID, its IP and its "

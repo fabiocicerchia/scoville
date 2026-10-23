@@ -282,7 +282,6 @@ critical	az group delete --name prod --yes
 high	az vm delete --name web-1
 high	hcloud server delete my-db
 high	scw instance server terminate 11111111
-high	doctl compute droplet delete web-1
 critical	heroku pg:reset DATABASE_URL
 high	wrangler r2 bucket delete assets
 high	frobctl delete cluster prod
@@ -354,6 +353,27 @@ medium	flyctl certs remove api.example.com
 high	flyctl pg detach my-db
 high	flyctl apps destroy api
 critical	flyctl volumes destroy vol_2n0l3vlnklpr8qy7
+
+## doctl
+safe	doctl compute droplet list
+safe	doctl compute droplet-action get 123 --action-id 456
+low	doctl compute droplet create web-1 --size s-1vcpu-1gb --image ubuntu-24-04-x64
+low	doctl compute droplet-action snapshot 123 --snapshot-name pre-rebuild
+low	doctl projects delete 4e5f6a7b
+low	doctl compute firewall add-rules fw-1 --inbound-rules protocol:tcp,ports:22,address:10.0.0.0/8
+medium	doctl compute tag delete web
+medium	doctl compute droplet-action power-off 123
+medium	doctl compute droplet-action resize 123 --size s-2vcpu-4gb --resize-disk
+medium	doctl databases user delete db-1 app
+medium	doctl compute reserved-ip delete 203.0.113.7
+high	doctl compute droplet delete web-1
+high	doctl compute droplet-action rebuild 123 --image ubuntu-24-04-x64
+high	doctl compute firewall add-rules fw-1 --inbound-rules protocol:tcp,ports:22,address:0.0.0.0/0
+high	doctl compute volume delete vol-1
+high	doctl compute domain delete example.com
+critical	doctl compute droplet delete --tag-name web --force
+critical	doctl kubernetes cluster delete staging --dangerous
+critical	doctl databases delete db-1
 
 ## gh
 safe	gh pr list

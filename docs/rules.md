@@ -54,7 +54,7 @@ about widening access rather than deleting anything.
 ## The long tail
 
 **Covered by verb classification, not enumeration.** Around 40 resource CLIs —
-`hcloud`, `scw`, `doctl`, `linode-cli`, `wrangler`, `pscale`, `incus`, `glab`,
+`hcloud`, `scw`, `linode-cli`, `wrangler`, `pscale`, `incus`, `glab`,
 `vercel`, `stripe` and friends — are scored by the verb in command position, so
 `hcloud server delete` is `high` and `hcloud server list` is `safe` without a
 per-CLI rule. Position matters: `hcloud server describe delete-me` stays `safe`.
@@ -71,16 +71,17 @@ Verb classification is a floor. It cannot see what a resource is worth
 and it cannot see a verb that lies. So the CLIs where both the traffic and the
 blast radius are high are enumerated per resource instead:
 
-**Enumerated per resource** — `argocd`, `ceph`, `eksctl`, `etcdctl`,
-`flyctl`/`fly`, `gh`, `heroku`, `nomad`, `openstack`, `pulumi`, `rbd`,
-`rclone`, `restic`/`borg`, `s3cmd`, `snap`, `vault`, `velero`, `virsh`, `zfs`.
+**Enumerated per resource** — `argocd`, `ceph`, `consul`, `doctl`, `eksctl`,
+`etcdctl`, `flyctl`/`fly`, `gh`, `heroku`, `nomad`, `openstack`, `pulumi`,
+`rbd`, `rclone`, `restic`/`borg`, `s3cmd`, `snap`, `vault`, `velero`, `virsh`,
+`zfs`.
 
 **Carried by verb classification** — everything else in `RESOURCE_CLIS`:
-`hcloud`, `scw`, `doctl`, `linode-cli`, `vultr-cli`, `civo`, `exo`, `upcloud`,
+`hcloud`, `scw`, `linode-cli`, `vultr-cli`, `civo`, `exo`, `upcloud`,
 `ibmcloud`, `oci`, `aliyun`, `railway`, `vercel`, `netlify`, `render`,
 `pscale`, `supabase`, `wrangler`, `glab`, `tea`, `flux`, `linkerd`,
-`istioctl`, `incus`, `lxc`, `machinectl`, `consul`, `cdk`, `cdktf`,
-`serverless`, `stripe`, `twilio`, `fastly`, `akamai`, `cf`, and the rest.
+`istioctl`, `incus`, `lxc`, `machinectl`, `cdk`, `cdktf`, `serverless`,
+`stripe`, `twilio`, `fastly`, `akamai`, `cf`, and the rest.
 
 `specific_clis()` and `generic_clis()` compute those two lists from the rule set
 rather than from a hand-maintained table, and the suite asserts the split — so a
@@ -108,6 +109,16 @@ scores lower**:
   restore created.
 - `gh api -X DELETE /repos/{owner}/{repo}` deletes a repository, and nothing in
   the command line is a destructive verb.
+- `doctl compute droplet-action rebuild` keeps the droplet's ID and IP and
+  reinstalls its disk from an image — everything on it is gone. It sits with
+  `droplet delete`, not with `reboot`.
+- `doctl compute tag delete` and `doctl compute droplet delete` are both
+  `delete`; the tag one deletes no resource, but a firewall that selects
+  droplets by that tag stops covering them, which is why it is a `network`
+  finding rather than nothing.
+- `doctl projects delete` cannot delete anything that is in use: DigitalOcean
+  refuses while the project holds resources, so it scores below the generic
+  delete.
 
 ## The reasoning behind a rule
 

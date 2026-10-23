@@ -740,6 +740,41 @@ INCIDENTS = {
         "and billing without destroying anything, which is what 'turn this off "
         "for now' usually means."
     ),
+    "DO-DROPLET-DELETE": (
+        "Deletes the droplet and its disk. The trap is that its automatic "
+        "backups are deleted with it: a team that turned backups on and "
+        "considers the droplet protected finds there is nothing to restore "
+        "from. Only snapshots outlive a droplet, so the safe order is "
+        "`droplet-action snapshot --wait`, then delete. `--tag-name` turns one "
+        "droplet into however many carry that tag today."
+    ),
+    "DO-DROPLET-REBUILD": (
+        "The verb that lies. Rebuild keeps the droplet's ID, its IP and its "
+        "place in the dashboard, so it reads like a reboot — and reinstalls "
+        "the disk from an image, so everything that was on it is gone. Verb "
+        "classification did not recognise `droplet-action` verbs at all and "
+        "scored this as unknown."
+    ),
+    "DO-TAG-DELETE": (
+        "Deleting a tag deletes no resource, which is why it looks free. But "
+        "DigitalOcean firewalls and load balancers can select droplets by tag, "
+        "so a tag that disappears takes those droplets out of the firewall that "
+        "was protecting them — silently, with nothing in the output to say so. "
+        "Check `doctl compute firewall list` for the tag first."
+    ),
+    "DO-DB-DELETE": (
+        "Deletes the managed database cluster, and its backups go with it: "
+        "there is no point-in-time restore of a cluster that no longer exists. "
+        "`doctl databases fork` copies it into a new cluster first, and a dump "
+        "is the copy that does not depend on DigitalOcean at all."
+    ),
+    "DO-K8S-DELETE": (
+        "Deletes the control plane and every node pool. Without `--dangerous` "
+        "the cluster's volumes and load balancers are left behind — orphaned "
+        "and billing, but the data survives. With it, they are deleted too, "
+        "which is the difference between a cluster you can rebuild and one "
+        "whose state is gone."
+    ),
     "GH-REPO-DEL": (
         "Deletes the repository with its issues, pull requests, releases and "
         "wiki. GitHub's restore window is short and does not cover everything, "

@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, NoReturn
@@ -10,6 +11,7 @@ import scoville.introspection
 import scoville.kube
 from scoville import (
     INCIDENTS,
+    RESOURCE_CLIS,
     RULES,
     ConfigError,
     Override,
@@ -960,17 +962,17 @@ def rule_id(cmd: str) -> str:
     return one(cmd)["rule"]
 
 
-PROMOTED = ("vault", "velero", "argocd", "openstack", "flyctl", "gh")
+PROMOTED = ("vault", "velero", "argocd", "openstack", "flyctl", "gh", "doctl")
 
 
 def test_the_promoted_clis_have_rules_of_their_own() -> None:
     assert set(PROMOTED) <= set(specific_clis())
 
 
-@pytest.mark.parametrize("cli", ["hcloud", "doctl", "scw", "linode-cli", "wrangler", "pscale"])
+@pytest.mark.parametrize("cli", ["hcloud", "vultr-cli", "scw", "linode-cli", "wrangler", "pscale"])
 def test_verb_classification_still_carries_the_clis_nobody_promoted(cli: str) -> None:
     # The floor is the reason a gate is worth having on day one of a new CLI.
-    # Promoting six of them must not quietly remove it from the other forty.
+    # Promoting a handful must not quietly remove it from the other forty.
     assert cli in generic_clis()
     assert rule_id(f"{cli} server delete web-1") == "CLI-DESTROY"
     assert level(f"{cli} server delete web-1") == "high"
@@ -985,6 +987,43 @@ def test_an_unenumerated_subcommand_of_a_promoted_cli_falls_back_to_the_verb() -
     assert rule_id("openstack flavor delete m1.small") == "CLI-DESTROY"
     assert rule_id("vault namespace delete acme") == "CLI-DESTROY"
     assert level("velero plugin remove acme/plugin") == "high"
+
+
+def test_doctl_scores_the_resource_not_the_verb() -> None:
+    # The issue's own worked example: both are `delete`, only one of them ends
+    # an afternoon.
+    assert score("doctl compute tag delete web") < score("doctl compute droplet delete web-1")
+    assert rule_id("doctl compute droplet delete web-1") == "DO-DROPLET-DELETE"
+    assert score("doctl compute volume delete vol-1") > score("doctl compute droplet delete web-1")
+
+
+def test_doctl_verbs_that_lie() -> None:
+    # `rebuild` keeps the droplet's ID and IP and wipes its disk; the generic
+    # classifier read it as nothing at all.
+    assert rule_id("doctl compute droplet-action rebuild 123 --image x") == "DO-DROPLET-REBUILD"
+    assert level("doctl compute droplet-action rebuild 123 --image x") == "high"
+    assert level("doctl compute droplet-action power-off 123") == "medium"
+    # A project cannot be deleted while it holds anything, so this one scores
+    # below the generic delete it would otherwise have been.
+    assert score("doctl projects delete p1") < score("frobctl delete p1")
+
+
+def test_doctl_flags_widen_the_same_command() -> None:
+    base = score("doctl kubernetes cluster delete staging")
+    assert score("doctl kubernetes cluster delete staging --dangerous") > base
+    one_droplet = score("doctl compute droplet delete web-1")
+    assert score("doctl compute droplet delete --tag-name web") > one_droplet
+    assert score("doctl compute droplet delete web-1 -f") == score("doctl compute droplet delete web-1 --force")
+
+
+def test_docs_name_the_same_enumerated_clis_the_rule_set_does() -> None:
+    # The prose had drifted: `consul` was listed as generic while the rule set
+    # enumerated it. Read the two lists back out of docs/rules.md.
+    text = (Path(__file__).resolve().parent.parent / "docs" / "rules.md").read_text()
+    section = text.split("**Enumerated per resource**", 1)[1].split("**Carried by verb classification**", 1)[0]
+    documented = {name for name in re.findall(r"`([^`]+)`", section) for name in name.split("/")}
+    resource = set(RESOURCE_CLIS.split())
+    assert documented & resource == set(specific_clis())
 
 
 def test_a_cli_nobody_has_enumerated_still_cannot_score_safe() -> None:

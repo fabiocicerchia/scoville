@@ -1016,6 +1016,31 @@ def test_doctl_flags_widen_the_same_command() -> None:
     assert score("doctl compute droplet delete web-1 -f") == score("doctl compute droplet delete web-1 --force")
 
 
+@pytest.mark.parametrize(
+    ("cmd", "rule"),
+    [
+        ("doctl apps delete 6f2b1c", "DO-APPS-DELETE"),
+        ("doctl databases db delete db-1 app", "DO-DB-DB-DELETE"),
+        ("doctl compute domain records delete example.com 12345", "DO-DOMAIN-RECORD-DELETE"),
+        ("doctl compute droplet-action enable-ipv6 123", "DO-DROPLET-ACTION"),
+        ("doctl compute droplet-action restore 123 --image-id 456", "DO-DROPLET-RESTORE"),
+        ("doctl compute firewall delete fw-1", "DO-FIREWALL-DELETE"),
+        ("doctl kubernetes cluster node-pool delete staging pool-1", "DO-K8S-NODEPOOL-DELETE"),
+        ("doctl compute load-balancer delete lb-1", "DO-LB-DELETE"),
+        ("doctl registry delete", "DO-REGISTRY-DELETE"),
+        ("doctl compute snapshot delete 789", "DO-SNAPSHOT-DELETE"),
+    ],
+)
+def test_each_doctl_rule_matches_its_own_command(cmd: str, rule: str) -> None:
+    # The corpus checks bands, and the verb classifier lands most of these in
+    # the same band anyway: only the rule id shows the specific rule matched.
+    assert rule_id(cmd) == rule
+
+
+def test_doctl_short_force_is_the_long_one() -> None:
+    assert any(f["rule"] == "DO-FORCE-SHORT" for f in one("doctl compute droplet delete web-1 -f")["factors"])
+
+
 def test_doctl_aliases_reach_the_same_rules() -> None:
     # `d` is droplet, `da` droplet-action and `del` delete in doctl's own
     # help; without them the alias fell back to the verb or to nothing.

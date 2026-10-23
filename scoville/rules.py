@@ -2374,28 +2374,30 @@ RULES = [
     R(
         "DO-DROPLET-DELETE",
         "doctl",
-        r"^compute\s+droplet\s+(delete|rm|d)\b",
+        r"^compute\s+(droplet|d)\s+(delete|del|rm|d)\b",
         70,
         "account",
         "irreversible",
         "deletes the droplet and its disk, and its automatic backups go with it — only snapshots outlive a droplet",
-        "`doctl compute droplet-action snapshot <id> --wait` first; a snapshot survives the delete, a backup does not",
+        "`doctl compute droplet-action snapshot <id> --snapshot-name <name> --wait` first; a snapshot survives the "
+        "delete, a backup does not",
     ),
     R(
         "DO-DROPLET-REBUILD",
         "doctl",
-        r"^compute\s+droplet-action\s+rebuild\b",
+        r"^compute\s+(droplet-action|da)\s+rebuild\b",
         70,
         "account",
         "irreversible",
         "rebuild reinstalls the droplet from an image: it keeps its ID and IP, which is what makes it look harmless, "
         "and loses everything on its disk",
-        "`doctl compute droplet-action snapshot <id> --wait` first if anything on the disk matters",
+        "`doctl compute droplet-action snapshot <id> --snapshot-name <name> --wait` first if anything on the disk "
+        "matters",
     ),
     R(
         "DO-DROPLET-RESTORE",
         "doctl",
-        r"^compute\s+droplet-action\s+restore\b",
+        r"^compute\s+(droplet-action|da)\s+restore\b",
         60,
         "account",
         "irreversible",
@@ -2404,7 +2406,7 @@ RULES = [
     R(
         "DO-DROPLET-POWER",
         "doctl",
-        r"^compute\s+droplet-action\s+(power-off|shutdown|power-cycle|reboot)\b",
+        r"^compute\s+(droplet-action|da)\s+(power-off|shutdown|power-cycle|reboot)\b",
         35,
         "host",
         "recoverable",
@@ -2415,7 +2417,7 @@ RULES = [
     R(
         "DO-DROPLET-RESIZE",
         "doctl",
-        r"^compute\s+droplet-action\s+resize\b",
+        r"^compute\s+(droplet-action|da)\s+resize\b",
         30,
         "host",
         "recoverable",
@@ -2424,7 +2426,7 @@ RULES = [
     R(
         "DO-DROPLET-SNAPSHOT",
         "doctl",
-        r"^compute\s+droplet-action\s+snapshot\b",
+        r"^compute\s+(droplet-action|da)\s+snapshot\b",
         15,
         "account",
         "reversible",
@@ -2436,7 +2438,7 @@ RULES = [
         # the whole family at UNKNOWN.
         "DO-DROPLET-ACTION",
         "doctl",
-        r"^compute\s+droplet-action\s+(?!(get|list|wait|snapshot)\b)\S",
+        r"^compute\s+(droplet-action|da)\s+(?!(get|list|wait|snapshot)\b)\S",
         25,
         "host",
         "recoverable",
@@ -2445,7 +2447,7 @@ RULES = [
     R(
         "DO-VOLUME-DELETE",
         "doctl",
-        r"^compute\s+volume\s+(delete|rm|d)\b",
+        r"^compute\s+volume\s+(delete|del|rm|d)\b",
         80,
         "account",
         "irreversible",
@@ -2455,7 +2457,7 @@ RULES = [
     R(
         "DO-SNAPSHOT-DELETE",
         "doctl",
-        r"^compute\s+snapshot\s+(delete|rm|d)\b",
+        r"^compute\s+snapshot\s+(delete|del|rm|d)\b",
         60,
         "account",
         "irreversible",
@@ -2464,7 +2466,7 @@ RULES = [
     R(
         "DO-TAG-DELETE",
         "doctl",
-        r"^compute\s+tag\s+(delete|rm|d)\b",
+        r"^compute\s+tag\s+(delete|del|rm|d)\b",
         35,
         "network",
         "recoverable",
@@ -2473,9 +2475,22 @@ RULES = [
         "`doctl compute firewall list` first — a tag-targeted firewall loses its droplets silently",
     ),
     R(
+        # The droplet-sized form of a tag delete: one droplet leaves every
+        # firewall and load balancer that selects it by this tag.
+        "DO-DROPLET-UNTAG",
+        "doctl",
+        r"^compute\s+(droplet|d)\s+untag\b",
+        35,
+        "network",
+        "recoverable",
+        "removes the tag from the droplet; a firewall or load balancer that selects droplets by this tag stops "
+        "covering it",
+        "`doctl compute firewall list` first — a tag-targeted firewall loses the droplet silently",
+    ),
+    R(
         "DO-FIREWALL-DELETE",
         "doctl",
-        r"^compute\s+firewall\s+(delete|rm|d)\b",
+        r"^compute\s+firewall\s+(delete|del|rm|d)\b",
         55,
         "network",
         "recoverable",
@@ -2494,7 +2509,7 @@ RULES = [
     R(
         "DO-RESERVED-IP-DELETE",
         "doctl",
-        r"^compute\s+(reserved-ip|floating-ip)\s+(delete|rm|d)\b",
+        r"^compute\s+(reserved-ip|floating-ip)\s+(delete|del|rm|d)\b",
         55,
         "network",
         "irreversible",
@@ -2503,7 +2518,7 @@ RULES = [
     R(
         "DO-LB-DELETE",
         "doctl",
-        r"^compute\s+load-balancer\s+(delete|rm|d)\b",
+        r"^compute\s+load-balancer\s+(delete|del|rm|d)\b",
         60,
         "network",
         "irreversible",
@@ -2512,7 +2527,7 @@ RULES = [
     R(
         "DO-DOMAIN-DELETE",
         "doctl",
-        r"^compute\s+domain\s+(delete|rm|d)\b",
+        r"^compute\s+domain\s+(delete|del|rm|d)\b",
         70,
         "network",
         "irreversible",
@@ -2522,7 +2537,7 @@ RULES = [
     R(
         "DO-DOMAIN-RECORD-DELETE",
         "doctl",
-        r"^compute\s+domain\s+records\s+(delete|rm|d)\b",
+        r"^compute\s+domain\s+records\s+(delete|del|rm|d)\b",
         45,
         "network",
         "recoverable",
@@ -2531,7 +2546,7 @@ RULES = [
     R(
         "DO-K8S-DELETE",
         "doctl",
-        r"^(kubernetes|k8s|k)\s+(cluster|c)\s+(delete|rm|d)\b",
+        r"^(kubernetes|k8s|k)\s+(cluster|c)\s+(delete|del|rm|d)\b",
         80,
         "cluster",
         "irreversible",
@@ -2540,7 +2555,7 @@ RULES = [
     R(
         "DO-K8S-NODEPOOL-DELETE",
         "doctl",
-        r"^(kubernetes|k8s|k)\s+(cluster|c)\s+(node-pool|pool|np)\s+(delete|rm|d)\b",
+        r"^(kubernetes|k8s|k)\s+(cluster|c)\s+(node-pool|pool|np)\s+(delete|del|rm|d)\b",
         55,
         "cluster",
         "recoverable",
@@ -2549,7 +2564,7 @@ RULES = [
     R(
         "DO-DB-DELETE",
         "doctl",
-        r"^(databases|database|db|dbs|d)\s+(delete|rm|d)\b",
+        r"^(databases|database|db|dbs|d)\s+(delete|del|rm|d)\b",
         90,
         "account",
         "irreversible",
@@ -2559,7 +2574,7 @@ RULES = [
     R(
         "DO-DB-DB-DELETE",
         "doctl",
-        r"^(databases|database|db|dbs|d)\s+db\s+(delete|rm|d)\b",
+        r"^(databases|database|db|dbs|d)\s+db\s+(delete|del|rm|d)\b",
         70,
         "account",
         "irreversible",
@@ -2568,7 +2583,7 @@ RULES = [
     R(
         "DO-DB-USER-DELETE",
         "doctl",
-        r"^(databases|database|db|dbs|d)\s+user\s+(delete|rm|d)\b",
+        r"^(databases|database|db|dbs|d)\s+user\s+(delete|del|rm|d)\b",
         45,
         "account",
         "recoverable",
@@ -2577,7 +2592,7 @@ RULES = [
     R(
         "DO-REGISTRY-DELETE",
         "doctl",
-        r"^(registry|r)\s+(delete|rm|d)\b",
+        r"^(registry|r)\s+(delete|del|rm|d)\b",
         75,
         "account",
         "irreversible",
@@ -2586,7 +2601,7 @@ RULES = [
     R(
         "DO-APPS-DELETE",
         "doctl",
-        r"^(apps|app|a)\s+(delete|rm|d)\b",
+        r"^(apps|app|a)\s+(delete|del|rm|d)\b",
         65,
         "account",
         "irreversible",
@@ -2595,7 +2610,7 @@ RULES = [
     R(
         "DO-PROJECT-DELETE",
         "doctl",
-        r"^(projects|project|p)\s+(delete|rm|d)\b",
+        r"^(projects|project|p)\s+(delete|del|rm|d)\b",
         15,
         "account",
         "recoverable",

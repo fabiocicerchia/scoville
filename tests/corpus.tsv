@@ -362,17 +362,21 @@ low	doctl compute droplet-action snapshot 123 --snapshot-name pre-rebuild
 low	doctl projects delete 4e5f6a7b
 low	doctl compute firewall add-rules fw-1 --inbound-rules protocol:tcp,ports:22,address:10.0.0.0/8
 medium	doctl compute tag delete web
+medium	doctl compute droplet untag 123 --tag-name frontend
 medium	doctl compute droplet-action power-off 123
 medium	doctl compute droplet-action resize 123 --size s-2vcpu-4gb --resize-disk
 medium	doctl databases user delete db-1 app
 medium	doctl compute reserved-ip delete 203.0.113.7
 high	doctl compute droplet delete web-1
 high	doctl compute droplet-action rebuild 123 --image ubuntu-24-04-x64
+high	doctl compute da rebuild 123 --image ubuntu-24-04-x64
+high	doctl compute d del web-1
 high	doctl compute firewall add-rules fw-1 --inbound-rules protocol:tcp,ports:22,address:0.0.0.0/0
 high	doctl compute volume delete vol-1
 high	doctl compute domain delete example.com
 critical	doctl compute droplet delete --tag-name web --force
 critical	doctl kubernetes cluster delete staging --dangerous
+high	doctl kubernetes cluster delete staging --dangerous=false
 critical	doctl databases delete db-1
 
 ## gh

@@ -9,7 +9,7 @@ Levels: `safe` 0–14 · `low` 15–34 · `medium` 35–59 · `high` 60–84 ·
 `critical` 85–100. Scope is the blast radius, and reversibility is how hard
 it is to get back.
 
-400 commands catalogued: **58** safe · **43** low · **116** medium · **122** high · **61** critical.
+404 commands catalogued: **58** safe · **43** low · **117** medium · **125** high · **61** critical.
 
 ## reading state
 
@@ -428,17 +428,21 @@ it is to get back.
 | `low` 15       | `doctl projects delete 4e5f6a7b`                                                                 | account | recoverable   |
 | `low` 30       | `doctl compute firewall add-rules fw-1 --inbound-rules protocol:tcp,ports:22,address:10.0.0.0/8` | network | reversible    |
 | `medium` 35    | `doctl compute tag delete web`                                                                   | network | recoverable   |
+| `medium` 35    | `doctl compute droplet untag 123 --tag-name frontend`                                            | network | recoverable   |
 | `medium` 35    | `doctl compute droplet-action power-off 123`                                                     | host    | recoverable   |
 | `medium` 50    | `doctl compute droplet-action resize 123 --size s-2vcpu-4gb --resize-disk`                       | host    | irreversible  |
 | `medium` 45    | `doctl databases user delete db-1 app`                                                           | account | recoverable   |
 | `medium` 55    | `doctl compute reserved-ip delete 203.0.113.7`                                                   | network | irreversible  |
 | `high` 70      | `doctl compute droplet delete web-1`                                                             | account | irreversible  |
 | `high` 70      | `doctl compute droplet-action rebuild 123 --image ubuntu-24-04-x64`                              | account | irreversible  |
+| `high` 70      | `doctl compute da rebuild 123 --image ubuntu-24-04-x64`                                          | account | irreversible  |
+| `high` 70      | `doctl compute d del web-1`                                                                      | account | irreversible  |
 | `high` 65      | `doctl compute firewall add-rules fw-1 --inbound-rules protocol:tcp,ports:22,address:0.0.0.0/0`  | network | reversible    |
 | `high` 80      | `doctl compute volume delete vol-1`                                                              | account | irreversible  |
 | `high` 70      | `doctl compute domain delete example.com`                                                        | network | irreversible  |
 | `critical` 100 | `doctl compute droplet delete --tag-name web --force`                                            | account | irreversible  |
 | `critical` 95  | `doctl kubernetes cluster delete staging --dangerous`                                            | cluster | irreversible  |
+| `high` 80      | `doctl kubernetes cluster delete staging --dangerous=false`                                      | cluster | irreversible  |
 | `critical` 90  | `doctl databases delete db-1`                                                                    | account | irreversible  |
 
 ## gh

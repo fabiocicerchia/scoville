@@ -115,7 +115,8 @@ scores lower**:
 - `doctl compute tag delete` and `doctl compute droplet delete` are both
   `delete`; the tag one deletes no resource, but a firewall that selects
   droplets by that tag stops covering them, which is why it is a `network`
-  finding rather than nothing.
+  finding rather than nothing. `doctl compute droplet untag` is the same
+  finding for one droplet.
 - `doctl projects delete` cannot delete anything that is in use: DigitalOcean
   refuses while the project holds resources, so it scores below the generic
   delete.

@@ -515,7 +515,7 @@ AMPS = [
     A(
         "DO-TAG-NAME",
         "doctl",
-        r"^compute\s+droplet\s+(delete|rm|d)\b.*--tag-name\b",
+        r"^compute\s+(droplet|d)\s+(delete|del|rm|d)\b.*--tag-name\b",
         20,
         "`--tag-name` deletes every droplet carrying the tag, not one — however many that is today",
         "account",
@@ -524,7 +524,7 @@ AMPS = [
     A(
         "DO-RESIZE-DISK",
         "doctl",
-        r"^compute\s+droplet-action\s+resize\b.*--resize-disk\b",
+        r"^compute\s+(droplet-action|da)\s+resize\b.*--resize-disk\b(?!=(?i:false|0)\b)",
         20,
         "`--resize-disk` grows the disk for good: the droplet can never be resized back down to a smaller plan",
         "host",
@@ -533,7 +533,7 @@ AMPS = [
     A(
         "DO-DANGEROUS",
         "doctl",
-        r"^(kubernetes|k8s|k)\s+(cluster|c)\s+(delete|rm|d)\b.*--dangerous\b",
+        r"^(kubernetes|k8s|k)\s+(cluster|c)\s+(delete|del|rm|d)\b.*--dangerous\b(?!=(?i:false|0)\b)",
         15,
         "`--dangerous` also deletes the cluster's volumes, volume snapshots and load balancers — the data that "
         "would otherwise outlive it",

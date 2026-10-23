@@ -745,7 +745,8 @@ INCIDENTS = {
         "backups are deleted with it: a team that turned backups on and "
         "considers the droplet protected finds there is nothing to restore "
         "from. Only snapshots outlive a droplet, so the safe order is "
-        "`droplet-action snapshot --wait`, then delete. `--tag-name` turns one "
+        "`droplet-action snapshot --snapshot-name <name> --wait`, then delete. "
+        "`--tag-name` turns one "
         "droplet into however many carry that tag today."
     ),
     "DO-DROPLET-REBUILD": (

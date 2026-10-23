@@ -1016,6 +1016,25 @@ def test_doctl_flags_widen_the_same_command() -> None:
     assert score("doctl compute droplet delete web-1 -f") == score("doctl compute droplet delete web-1 --force")
 
 
+def test_doctl_aliases_reach_the_same_rules() -> None:
+    # `d` is droplet, `da` droplet-action and `del` delete in doctl's own
+    # help; without them the alias fell back to the verb or to nothing.
+    assert rule_id("doctl compute d del web-1") == "DO-DROPLET-DELETE"
+    assert rule_id("doctl compute da rebuild 123 --image x") == "DO-DROPLET-REBUILD"
+
+
+def test_doctl_flags_set_to_false_do_not_widen() -> None:
+    base = score("doctl kubernetes cluster delete staging")
+    assert score("doctl kubernetes cluster delete staging --dangerous=false") == base
+    resize = score("doctl compute droplet-action resize 1 --size x")
+    assert score("doctl compute droplet-action resize 1 --size x --resize-disk=false") == resize
+
+
+def test_untagging_a_droplet_is_the_tag_delete_one_droplet_wide() -> None:
+    assert rule_id("doctl compute droplet untag 123 --tag-name frontend") == "DO-DROPLET-UNTAG"
+    assert level("doctl compute droplet untag 123 --tag-name frontend") == "medium"
+
+
 def test_docs_name_the_same_enumerated_clis_the_rule_set_does() -> None:
     # The prose had drifted: `consul` was listed as generic while the rule set
     # enumerated it. Read the two lists back out of docs/rules.md.

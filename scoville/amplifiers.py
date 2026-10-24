@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 
 from .catalog import A
+from .rules import DO_DELETE, DO_DROPLET, DO_DROPLET_ACTION, DO_K8S
 
 AMPS = [
     A(
@@ -511,6 +512,41 @@ AMPS = [
         25,
         "the immediate strategy stops every machine before starting the new ones — a full outage, not a rolling deploy",
         "account",
+    ),
+    A(
+        "DO-TAG-NAME",
+        "doctl",
+        rf"{DO_DROPLET}{DO_DELETE}\b.*--tag-name\b",
+        20,
+        "`--tag-name` deletes every droplet carrying the tag, not one — however many that is today",
+        "account",
+        "irreversible",
+    ),
+    A(
+        "DO-RESIZE-DISK",
+        "doctl",
+        rf"{DO_DROPLET_ACTION}resize\b.*--resize-disk\b(?!=(?i:false|0)\b)",
+        20,
+        "`--resize-disk` grows the disk for good: the droplet can never be resized back down to a smaller plan",
+        "host",
+        "irreversible",
+    ),
+    A(
+        "DO-DANGEROUS",
+        "doctl",
+        rf"{DO_K8S}{DO_DELETE}\b(?!-).*--dangerous\b(?!=(?i:false|0)\b)",
+        15,
+        "`--dangerous` also deletes the cluster's volumes, volume snapshots and load balancers — the data that "
+        "would otherwise outlive it",
+        "cluster",
+        "irreversible",
+    ),
+    A(
+        "DO-FORCE-SHORT",
+        "doctl",
+        r"^\S.*\s-f(\s|$)",
+        12,
+        "doctl asks before deleting; `-f` is `--force` and skips that question",
     ),
     A(
         "GH-ADMIN",

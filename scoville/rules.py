@@ -2460,7 +2460,7 @@ RULES = [
         "account",
         "irreversible",
         "destroys the block-storage volume and the data on it; only its snapshots survive",
-        "`doctl compute volume snapshot <id>` first",
+        "`doctl compute volume snapshot <id> --snapshot-name <name>` first",
     ),
     R(
         "DO-SNAPSHOT-DELETE",

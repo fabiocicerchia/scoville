@@ -9,7 +9,7 @@ Levels: `safe` 0–14 · `low` 15–34 · `medium` 35–59 · `high` 60–84 ·
 `critical` 85–100. Scope is the blast radius, and reversibility is how hard
 it is to get back.
 
-415 commands catalogued: **58** safe · **44** low · **120** medium · **132** high · **61** critical.
+420 commands catalogued: **58** safe · **44** low · **122** medium · **134** high · **62** critical.
 
 ## reading state
 
@@ -430,6 +430,7 @@ it is to get back.
 | `low` 25       | `doctl compute droplet-action enable-ipv6 123`                                                   | host    | recoverable   |
 | `medium` 35    | `doctl compute tag delete web`                                                                   | network | recoverable   |
 | `medium` 35    | `doctl compute droplet untag 123 --tag-name frontend`                                            | network | recoverable   |
+| `medium` 35    | `doctl compute tag remove web --resource=do:droplet:123,do:droplet:456`                          | network | recoverable   |
 | `medium` 35    | `doctl compute droplet-action power-off 123`                                                     | host    | recoverable   |
 | `medium` 50    | `doctl compute droplet-action resize 123 --size s-2vcpu-4gb --resize-disk`                       | host    | irreversible  |
 | `medium` 45    | `doctl databases user delete db-1 app`                                                           | account | recoverable   |
@@ -437,6 +438,7 @@ it is to get back.
 | `medium` 45    | `doctl compute domain records delete example.com 12345`                                          | network | recoverable   |
 | `medium` 55    | `doctl compute firewall delete fw-1`                                                             | network | recoverable   |
 | `medium` 55    | `doctl kubernetes cluster node-pool delete staging pool-1`                                       | cluster | recoverable   |
+| `medium` 35    | `doctl kubernetes cluster node-pool delete-node staging pool-1 node-1`                           | cluster | recoverable   |
 | `high` 70      | `doctl compute droplet delete web-1`                                                             | account | irreversible  |
 | `high` 70      | `doctl compute droplet-action rebuild 123 --image ubuntu-24-04-x64`                              | account | irreversible  |
 | `high` 70      | `doctl compute da rebuild 123 --image ubuntu-24-04-x64`                                          | account | irreversible  |
@@ -445,6 +447,8 @@ it is to get back.
 | `high` 80      | `doctl compute volume delete vol-1`                                                              | account | irreversible  |
 | `high` 70      | `doctl compute domain delete example.com`                                                        | network | irreversible  |
 | `high` 80      | `doctl kubernetes cluster delete staging --dangerous=false`                                      | cluster | irreversible  |
+| `high` 80      | `doctl kube clusters d staging`                                                                  | cluster | irreversible  |
+| `high` 80      | `doctl kubernetes cluster delete-selective staging --volumes vol-1`                              | cluster | irreversible  |
 | `high` 65      | `doctl apps delete 6f2b1c`                                                                       | account | irreversible  |
 | `high` 70      | `doctl databases db delete db-1 app`                                                             | account | irreversible  |
 | `high` 60      | `doctl compute droplet-action restore 123 --image-id 456`                                        | account | irreversible  |
@@ -454,6 +458,7 @@ it is to get back.
 | `high` 60      | `doctl compute snapshot delete 789`                                                              | account | irreversible  |
 | `critical` 100 | `doctl compute droplet delete --tag-name web --force`                                            | account | irreversible  |
 | `critical` 95  | `doctl kubernetes cluster delete staging --dangerous`                                            | cluster | irreversible  |
+| `critical` 95  | `doctl kube clusters d staging --dangerous`                                                      | cluster | irreversible  |
 | `critical` 90  | `doctl databases delete db-1`                                                                    | account | irreversible  |
 
 ## gh

@@ -364,6 +364,7 @@ low	doctl compute firewall add-rules fw-1 --inbound-rules protocol:tcp,ports:22,
 low	doctl compute droplet-action enable-ipv6 123
 medium	doctl compute tag delete web
 medium	doctl compute droplet untag 123 --tag-name frontend
+medium	doctl compute tag remove web --resource=do:droplet:123,do:droplet:456
 medium	doctl compute droplet-action power-off 123
 medium	doctl compute droplet-action resize 123 --size s-2vcpu-4gb --resize-disk
 medium	doctl databases user delete db-1 app
@@ -371,6 +372,7 @@ medium	doctl compute reserved-ip delete 203.0.113.7
 medium	doctl compute domain records delete example.com 12345
 medium	doctl compute firewall delete fw-1
 medium	doctl kubernetes cluster node-pool delete staging pool-1
+medium	doctl kubernetes cluster node-pool delete-node staging pool-1 node-1
 high	doctl compute droplet delete web-1
 high	doctl compute droplet-action rebuild 123 --image ubuntu-24-04-x64
 high	doctl compute da rebuild 123 --image ubuntu-24-04-x64
@@ -379,6 +381,8 @@ high	doctl compute firewall add-rules fw-1 --inbound-rules protocol:tcp,ports:22
 high	doctl compute volume delete vol-1
 high	doctl compute domain delete example.com
 high	doctl kubernetes cluster delete staging --dangerous=false
+high	doctl kube clusters d staging
+high	doctl kubernetes cluster delete-selective staging --volumes vol-1
 high	doctl apps delete 6f2b1c
 high	doctl databases db delete db-1 app
 high	doctl compute droplet-action restore 123 --image-id 456
@@ -388,6 +392,7 @@ high	doctl registry delete
 high	doctl compute snapshot delete 789
 critical	doctl compute droplet delete --tag-name web --force
 critical	doctl kubernetes cluster delete staging --dangerous
+critical	doctl kube clusters d staging --dangerous
 critical	doctl databases delete db-1
 
 ## gh

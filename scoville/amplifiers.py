@@ -533,7 +533,7 @@ AMPS = [
     A(
         "DO-DANGEROUS",
         "doctl",
-        r"^(kubernetes|k8s|k)\s+(cluster|c)\s+(delete|del|rm|d)\b.*--dangerous\b(?!=(?i:false|0)\b)",
+        r"^(kubernetes|kube|k8s|k)\s+(cluster|clusters|c)\s+(delete|del|rm|d)\b(?!-).*--dangerous\b(?!=(?i:false|0)\b)",
         15,
         "`--dangerous` also deletes the cluster's volumes, volume snapshots and load balancers — the data that "
         "would otherwise outlive it",

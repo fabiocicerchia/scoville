@@ -29,6 +29,12 @@ _LEAD = r"(?:\S+[\s:]){0,3}"
 _READ = r"(?:list|ls|describe|get|show|info|status|version|inspect|read|view|search|find|diff)"
 # doctl's own aliases for `delete`, which every DO- rule below accepts.
 _DO_DELETE = r"(delete|del|rm|d)"
+# `doctl kubernetes cluster` and its aliases (`kube clusters` is as valid as
+# the long form). The delete verb is closed with `(?!-)` because
+# `delete-selective` and `delete-node` are subcommands of their own, and `\b`
+# alone stops at the hyphen.
+_DO_K8S = r"^(kubernetes|kube|k8s|k)\s+(cluster|clusters|c)\s+"
+_DO_NODE_POOL = r"(node-pool|node-pools|nodepool|nodepools|pool|pools|np|p)\s+"
 READ_VERBS = rf"^{_LEAD}{_READ}\b"
 WRITE_VERBS = (
     rf"^(?!{_LEAD}{_READ}\b){_LEAD}"
@@ -2490,6 +2496,20 @@ RULES = [
         "`doctl compute firewall list` first — a tag-targeted firewall loses the droplet silently",
     ),
     R(
+        # `tag remove` is `droplet untag` from the tag's side, for any number
+        # of resources at once. Without this the generic `remove` classifier
+        # read it as an irreversible deletion.
+        "DO-TAG-REMOVE",
+        "doctl",
+        r"^compute\s+tag\s+remove\b",
+        35,
+        "network",
+        "recoverable",
+        "removes the tag from the named resources; a firewall or load balancer that selects droplets by this tag "
+        "stops covering them",
+        "`doctl compute firewall list` first — a tag-targeted firewall loses those droplets silently",
+    ),
+    R(
         "DO-FIREWALL-DELETE",
         "doctl",
         rf"^compute\s+firewall\s+{_DO_DELETE}\b",
@@ -2548,20 +2568,40 @@ RULES = [
     R(
         "DO-K8S-DELETE",
         "doctl",
-        rf"^(kubernetes|k8s|k)\s+(cluster|c)\s+{_DO_DELETE}\b",
+        rf"{_DO_K8S}{_DO_DELETE}\b(?!-)",
         80,
         "cluster",
         "irreversible",
         "deletes the control plane and every node pool; whatever state lived in the cluster goes with it",
     ),
     R(
+        "DO-K8S-DELETE-SELECTIVE",
+        "doctl",
+        rf"{_DO_K8S}(delete-selective|ds)\b",
+        80,
+        "cluster",
+        "irreversible",
+        "deletes the control plane and every node pool, and also every volume, volume snapshot and load balancer "
+        "named in `--volumes`, `--snapshots` and `--load-balancers`",
+        "`doctl kubernetes cluster list-associated-resources <cluster>` first, and name only what you mean to lose",
+    ),
+    R(
         "DO-K8S-NODEPOOL-DELETE",
         "doctl",
-        rf"^(kubernetes|k8s|k)\s+(cluster|c)\s+(node-pool|pool|np)\s+{_DO_DELETE}\b",
+        rf"{_DO_K8S}{_DO_NODE_POOL}{_DO_DELETE}\b(?!-)",
         55,
         "cluster",
         "recoverable",
         "evicts every pod on those nodes; anything the other pools cannot fit stays pending",
+    ),
+    R(
+        "DO-K8S-NODE-DELETE",
+        "doctl",
+        rf"{_DO_K8S}{_DO_NODE_POOL}delete-node\b",
+        35,
+        "cluster",
+        "recoverable",
+        "deletes one node; its pods are drained onto the rest of the cluster first unless `--skip-drain` is set",
     ),
     R(
         "DO-DB-DELETE",

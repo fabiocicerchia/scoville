@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 
 from .catalog import A
+from .rules import DO_DELETE, DO_DROPLET, DO_DROPLET_ACTION, DO_K8S
 
 AMPS = [
     A(
@@ -515,7 +516,7 @@ AMPS = [
     A(
         "DO-TAG-NAME",
         "doctl",
-        r"^compute\s+(droplet|d)\s+(delete|del|rm|d)\b.*--tag-name\b",
+        rf"{DO_DROPLET}{DO_DELETE}\b.*--tag-name\b",
         20,
         "`--tag-name` deletes every droplet carrying the tag, not one — however many that is today",
         "account",
@@ -524,7 +525,7 @@ AMPS = [
     A(
         "DO-RESIZE-DISK",
         "doctl",
-        r"^compute\s+(droplet-action|da)\s+resize\b.*--resize-disk\b(?!=(?i:false|0)\b)",
+        rf"{DO_DROPLET_ACTION}resize\b.*--resize-disk\b(?!=(?i:false|0)\b)",
         20,
         "`--resize-disk` grows the disk for good: the droplet can never be resized back down to a smaller plan",
         "host",
@@ -533,7 +534,7 @@ AMPS = [
     A(
         "DO-DANGEROUS",
         "doctl",
-        r"^(kubernetes|kube|k8s|k)\s+(cluster|clusters|c)\s+(delete|del|rm|d)\b(?!-).*--dangerous\b(?!=(?i:false|0)\b)",
+        rf"{DO_K8S}{DO_DELETE}\b(?!-).*--dangerous\b(?!=(?i:false|0)\b)",
         15,
         "`--dangerous` also deletes the cluster's volumes, volume snapshots and load balancers — the data that "
         "would otherwise outlive it",

@@ -27,6 +27,18 @@ RESOURCE_CLIS = (
 # *named* delete-me does not turn a describe into a destroy.
 _LEAD = r"(?:\S+[\s:]){0,3}"
 _READ = r"(?:list|ls|describe|get|show|info|status|version|inspect|read|view|search|find|diff)"
+# doctl's own aliases, which every DO- rule and amplifier accepts. One
+# fragment per command group, so an alias added here reaches all of them.
+DO_DELETE = r"(delete|del|rm|d)"
+DO_DROPLET = r"^compute\s+(droplet|d)\s+"
+DO_DROPLET_ACTION = r"^compute\s+(droplet-action|da)\s+"
+DO_DB = r"^(databases|database|db|dbs|d)\s+"
+# `doctl kubernetes cluster` and its aliases (`kube clusters` is as valid as
+# the long form). The delete verb is closed with `(?!-)` because
+# `delete-selective` and `delete-node` are subcommands of their own, and `\b`
+# alone stops at the hyphen.
+DO_K8S = r"^(kubernetes|kube|k8s|k)\s+(cluster|clusters|c)\s+"
+DO_NODE_POOL = r"(node-pool|node-pools|nodepool|nodepools|pool|pools|np|p)\s+"
 READ_VERBS = rf"^{_LEAD}{_READ}\b"
 WRITE_VERBS = (
     rf"^(?!{_LEAD}{_READ}\b){_LEAD}"
@@ -2365,6 +2377,290 @@ RULES = [
         "recoverable",
         "removes the certificate for that hostname; requests to it stop being served over HTTPS "
         "until a new one is issued and validated",
+    ),
+    # doctl ------------------------------------------------------------------
+    # Per resource because the generic verb scores `compute droplet delete`
+    # and `compute tag delete` alike, and misses `droplet-action` entirely:
+    # its verbs are hyphenated nouns (`power-off`, `rebuild`) no classifier
+    # reads as anything.
+    R(
+        "DO-DROPLET-DELETE",
+        "doctl",
+        rf"{DO_DROPLET}{DO_DELETE}\b",
+        70,
+        "account",
+        "irreversible",
+        "deletes the droplet and its disk, and its automatic backups go with it — only snapshots outlive a droplet",
+        "`doctl compute droplet-action snapshot <id> --snapshot-name <name> --wait` first; a snapshot survives the "
+        "delete, a backup does not",
+    ),
+    R(
+        "DO-DROPLET-REBUILD",
+        "doctl",
+        rf"{DO_DROPLET_ACTION}rebuild\b",
+        70,
+        "account",
+        "irreversible",
+        "rebuild reinstalls the droplet from an image: it keeps its ID and IP, which is what makes it look harmless, "
+        "and loses everything on its disk",
+        "`doctl compute droplet-action snapshot <id> --snapshot-name <name> --wait` first if anything on the disk "
+        "matters",
+    ),
+    R(
+        "DO-DROPLET-RESTORE",
+        "doctl",
+        rf"{DO_DROPLET_ACTION}restore\b",
+        60,
+        "account",
+        "irreversible",
+        "overwrites the droplet's disk with a backup: everything written since that backup is gone",
+    ),
+    R(
+        "DO-DROPLET-POWER",
+        "doctl",
+        rf"{DO_DROPLET_ACTION}(power-off|shutdown|power-cycle|reboot)\b",
+        35,
+        "host",
+        "recoverable",
+        "an outage until it is back up: nothing is deleted, but `power-off` and `power-cycle` cut power with "
+        "writes in flight, where `shutdown` asks the OS first",
+        "`shutdown` rather than `power-off` lets the OS flush its disks",
+    ),
+    R(
+        "DO-DROPLET-RESIZE",
+        "doctl",
+        rf"{DO_DROPLET_ACTION}resize\b",
+        30,
+        "host",
+        "recoverable",
+        "powers the droplet off to resize it; without `--resize-disk` it can be resized back down",
+    ),
+    R(
+        "DO-DROPLET-SNAPSHOT",
+        "doctl",
+        rf"{DO_DROPLET_ACTION}snapshot\b",
+        15,
+        "account",
+        "reversible",
+        "takes a snapshot, billed per GB stored — the step that makes a later delete or rebuild recoverable",
+    ),
+    R(
+        # Every other droplet-action: verbs like `enable-ipv6` and
+        # `change-kernel` read as nothing to the verb classifier, which left
+        # the whole family at UNKNOWN.
+        "DO-DROPLET-ACTION",
+        "doctl",
+        rf"{DO_DROPLET_ACTION}(?!(get|list|wait|snapshot)\b)\S",
+        25,
+        "host",
+        "recoverable",
+        "changes a running droplet; some actions power it off to apply",
+    ),
+    R(
+        "DO-VOLUME-DELETE",
+        "doctl",
+        rf"^compute\s+volume\s+{DO_DELETE}\b",
+        80,
+        "account",
+        "irreversible",
+        "destroys the block-storage volume and the data on it; only its snapshots survive",
+        "`doctl compute volume snapshot <id> --snapshot-name <name>` first",
+    ),
+    R(
+        "DO-SNAPSHOT-DELETE",
+        "doctl",
+        rf"^compute\s+snapshot\s+{DO_DELETE}\b",
+        60,
+        "account",
+        "irreversible",
+        "a snapshot is often the only copy left of a droplet or volume that is already gone",
+    ),
+    R(
+        "DO-TAG-DELETE",
+        "doctl",
+        rf"^compute\s+tag\s+{DO_DELETE}\b",
+        35,
+        "network",
+        "recoverable",
+        "removes the tag from everything that carries it; the resources are untouched, but a firewall or load "
+        "balancer that selects droplets by this tag stops covering them",
+        "`doctl compute firewall list` first — a tag-targeted firewall loses its droplets silently",
+    ),
+    R(
+        # The droplet-sized form of a tag delete: one droplet leaves every
+        # firewall and load balancer that selects it by this tag.
+        "DO-DROPLET-UNTAG",
+        "doctl",
+        rf"{DO_DROPLET}untag\b",
+        35,
+        "network",
+        "recoverable",
+        "removes the tag from the droplet; a firewall or load balancer that selects droplets by this tag stops "
+        "covering it",
+        "`doctl compute firewall list` first — a tag-targeted firewall loses the droplet silently",
+    ),
+    R(
+        # `tag remove` is `droplet untag` from the tag's side, for any number
+        # of resources at once. Without this the generic `remove` classifier
+        # read it as an irreversible deletion.
+        "DO-TAG-REMOVE",
+        "doctl",
+        r"^compute\s+tag\s+remove\b",
+        35,
+        "network",
+        "recoverable",
+        "removes the tag from the named resources; a firewall or load balancer that selects droplets by this tag "
+        "stops covering them",
+        "`doctl compute firewall list` first — a tag-targeted firewall loses those droplets silently",
+    ),
+    R(
+        "DO-FIREWALL-DELETE",
+        "doctl",
+        rf"^compute\s+firewall\s+{DO_DELETE}\b",
+        55,
+        "network",
+        "recoverable",
+        "the droplets it covered are open to whatever their own config allows",
+    ),
+    R(
+        "DO-FIREWALL-RULES",
+        "doctl",
+        r"^compute\s+firewall\s+(create|update|add-rules)\b",
+        30,
+        "network",
+        "reversible",
+        "opens ports to the addresses named in the inbound rules — the addresses are the whole of the decision",
+        "name a CIDR you control; `address:0.0.0.0/0` is the entire internet",
+    ),
+    R(
+        "DO-RESERVED-IP-DELETE",
+        "doctl",
+        rf"^compute\s+(reserved-ip|floating-ip)\s+{DO_DELETE}\b",
+        55,
+        "network",
+        "irreversible",
+        "releases the address for good: DNS still pointing at it now points at whoever is assigned it next",
+    ),
+    R(
+        "DO-LB-DELETE",
+        "doctl",
+        rf"^compute\s+load-balancer\s+{DO_DELETE}\b",
+        60,
+        "network",
+        "irreversible",
+        "deletes the load balancer and releases its IP; traffic to that IP stops, and a new one gets a new IP",
+    ),
+    R(
+        "DO-DOMAIN-DELETE",
+        "doctl",
+        rf"^compute\s+domain\s+{DO_DELETE}\b",
+        70,
+        "network",
+        "irreversible",
+        "removes the zone and every record in it from DigitalOcean's nameservers: the domain stops resolving",
+        "`doctl compute domain records list <domain>` and keep the output — it is the only way to rebuild the zone",
+    ),
+    R(
+        "DO-DOMAIN-RECORD-DELETE",
+        "doctl",
+        rf"^compute\s+domain\s+records\s+{DO_DELETE}\b",
+        45,
+        "network",
+        "recoverable",
+        "the name stops resolving for as long as resolvers cache the answer, even after the record is recreated",
+    ),
+    R(
+        "DO-K8S-DELETE",
+        "doctl",
+        rf"{DO_K8S}{DO_DELETE}\b(?!-)",
+        80,
+        "cluster",
+        "irreversible",
+        "deletes the control plane and every node pool; whatever state lived in the cluster goes with it",
+    ),
+    R(
+        "DO-K8S-DELETE-SELECTIVE",
+        "doctl",
+        rf"{DO_K8S}(delete-selective|ds)\b",
+        80,
+        "cluster",
+        "irreversible",
+        "deletes the control plane and every node pool, and also every volume, volume snapshot and load balancer "
+        "named in `--volumes`, `--snapshots` and `--load-balancers`",
+        "`doctl kubernetes cluster list-associated-resources <cluster>` first, and name only what you mean to lose",
+    ),
+    R(
+        "DO-K8S-NODEPOOL-DELETE",
+        "doctl",
+        rf"{DO_K8S}{DO_NODE_POOL}{DO_DELETE}\b(?!-)",
+        55,
+        "cluster",
+        "recoverable",
+        "evicts every pod on those nodes; anything the other pools cannot fit stays pending",
+    ),
+    R(
+        "DO-K8S-NODE-DELETE",
+        "doctl",
+        rf"{DO_K8S}{DO_NODE_POOL}delete-node\b",
+        35,
+        "cluster",
+        "recoverable",
+        "deletes one node; its pods are drained onto the rest of the cluster first unless `--skip-drain` is set",
+    ),
+    R(
+        "DO-DB-DELETE",
+        "doctl",
+        rf"{DO_DB}{DO_DELETE}\b",
+        90,
+        "account",
+        "irreversible",
+        "deletes the managed database cluster, and its backups are deleted with it",
+        "`doctl databases fork` or a dump first — nothing of the cluster survives this",
+    ),
+    R(
+        "DO-DB-DB-DELETE",
+        "doctl",
+        rf"{DO_DB}db\s+{DO_DELETE}\b",
+        70,
+        "account",
+        "irreversible",
+        "drops one database inside the cluster; a backup can bring it back only by forking a new cluster",
+    ),
+    R(
+        "DO-DB-USER-DELETE",
+        "doctl",
+        rf"{DO_DB}user\s+{DO_DELETE}\b",
+        45,
+        "account",
+        "recoverable",
+        "every client connecting as that user fails at its next connection",
+    ),
+    R(
+        "DO-REGISTRY-DELETE",
+        "doctl",
+        rf"^(registry|r)\s+{DO_DELETE}\b",
+        75,
+        "account",
+        "irreversible",
+        "deletes the container registry and every image in it; clusters pulling from it fail on their next pull",
+    ),
+    R(
+        "DO-APPS-DELETE",
+        "doctl",
+        rf"^(apps|app|a)\s+{DO_DELETE}\b",
+        65,
+        "account",
+        "irreversible",
+        "deletes the App Platform app with its deployments, config and default domain; the source repo is untouched",
+    ),
+    R(
+        "DO-PROJECT-DELETE",
+        "doctl",
+        rf"^(projects|project|p)\s+{DO_DELETE}\b",
+        15,
+        "account",
+        "recoverable",
+        "DigitalOcean refuses to delete a project that still holds resources, so this can only remove an empty one",
     ),
     # gh ---------------------------------------------------------------------
     R(

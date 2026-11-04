@@ -229,7 +229,7 @@ def pick_rule(binary: str, args_str: str) -> Entry | None:
     return max(candidates, key=lambda r: (not r["generic"], r["sub"] is not None, r["base"]))
 
 
-def _score_local_definition(  # noqa: PLR0913,PLR0917 — the scorer's whole context, passed down one level
+def _score_local_definition(  # noqa: PLR0913 — the scorer's whole context, passed down one level
     local: Definition,
     raw: str,
     binary: str,
@@ -383,7 +383,7 @@ def _factor(f: FactorTuple) -> Factor:
     }
 
 
-def score_command(  # noqa: PLR0912,PLR0913,PLR0915,PLR0917 — the decision table this tool exists to be
+def score_command(  # noqa: PLR0912,PLR0913,PLR0915 — the decision table this tool exists to be
     raw: str,
     tokens: list[str],
     strict: bool = False,

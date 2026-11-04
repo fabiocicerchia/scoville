@@ -616,13 +616,13 @@ def score_command(  # noqa: PLR0912,PLR0913,PLR0915 — the decision table this 
 
     # dampeners
     dry = None
-    for pattern, why in DAMPENERS:
-        if why is None:
+    for pattern, note in DAMPENERS:
+        if note is None:
             if binary in DRY_RUN_N_BINS and pattern.search(args_str):
                 dry = "-n: dry run, nothing is written"
             continue
         if pattern.search(args_str):
-            dry = why
+            dry = note
 
     score = max(0, min(100, sum(p for p, *_ in factors)))
     for f in factors:

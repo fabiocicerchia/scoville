@@ -116,8 +116,8 @@ def carried_command(  # noqa: PLR0911,PLR0912 — one arm per wrapper this under
     if binary in ("kubectl", "oc") and sub in ("exec", "run", "debug"):
         if "--" in args:
             k = args.index("--")
-            target = next((a for a in args[1:k] if not a.startswith("-")), None)
-            return (args[k + 1 :] or None), "pod", target
+            pod = next((a for a in args[1:k] if not a.startswith("-")), None)
+            return (args[k + 1 :] or None), "pod", pod
         return None, "pod", None
 
     if binary in ("ssh", "mosh"):

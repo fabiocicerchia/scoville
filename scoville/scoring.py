@@ -234,6 +234,7 @@ def _score_local_definition(  # noqa: PLR0913 — the scorer's whole context, pa
     raw: str,
     binary: str,
     args: list[str],
+    *,
     privileged: bool,
     strict: bool,
     introspect: bool,
@@ -386,6 +387,7 @@ def _factor(f: FactorTuple) -> Factor:
 def score_command(  # noqa: PLR0912,PLR0913,PLR0915 — the decision table this tool exists to be
     raw: str,
     tokens: list[str],
+    *,
     strict: bool = False,
     introspect: bool = False,
     depth: int = 0,
@@ -438,14 +440,14 @@ def score_command(  # noqa: PLR0912,PLR0913,PLR0915 — the decision table this 
             raw,
             binary,
             args,
-            privileged,
-            strict,
-            introspect,
-            depth,
-            basedir,
-            seen,
-            defs,
-            offset,
+            privileged=privileged,
+            strict=strict,
+            introspect=introspect,
+            depth=depth,
+            basedir=basedir,
+            seen=seen,
+            defs=defs,
+            offset=offset,
         )
         if resolved:
             return resolved

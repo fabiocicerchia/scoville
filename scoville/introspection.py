@@ -27,7 +27,7 @@ def _docker(args: list[str], timeout: float = 5) -> str | None:
         if exe is None:
             return None
         # Read-only inspects, fixed argv, no shell.
-        r = subprocess.run(  # noqa: S603
+        r = subprocess.run(  # noqa: S603  # nosec B603 - fixed argv, no shell
             [exe, *args], capture_output=True, text=True, timeout=timeout, check=False
         )
     except (OSError, subprocess.SubprocessError):

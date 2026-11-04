@@ -75,5 +75,5 @@ def test_corpus_command_scores_as_catalogued(expected: str, command: str) -> Non
 
 def test_inventory_markdown_is_in_sync() -> None:
     """INVENTORY.md is generated — `make inventory` regenerates it."""
-    rendered = subprocess.run([sys.executable, str(RENDER)], capture_output=True, text=True, check=True).stdout
+    rendered = subprocess.run([sys.executable, str(RENDER)], capture_output=True, text=True, check=True).stdout  # nosec B603
     assert INVENTORY.read_text() == rendered, "INVENTORY.md is stale — run `make inventory`"

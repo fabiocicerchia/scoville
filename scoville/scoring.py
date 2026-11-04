@@ -229,11 +229,12 @@ def pick_rule(binary: str, args_str: str) -> Entry | None:
     return max(candidates, key=lambda r: (not r["generic"], r["sub"] is not None, r["base"]))
 
 
-def _score_local_definition(  # noqa: PLR0913,PLR0917 — the scorer's whole context, passed down one level
+def _score_local_definition(  # noqa: PLR0913 — the scorer's whole context, passed down one level
     local: Definition,
     raw: str,
     binary: str,
     args: list[str],
+    *,
     privileged: bool,
     strict: bool,
     introspect: bool,
@@ -383,9 +384,10 @@ def _factor(f: FactorTuple) -> Factor:
     }
 
 
-def score_command(  # noqa: PLR0912,PLR0913,PLR0915,PLR0917 — the decision table this tool exists to be
+def score_command(  # noqa: PLR0912,PLR0913,PLR0915 — the decision table this tool exists to be
     raw: str,
     tokens: list[str],
+    *,
     strict: bool = False,
     introspect: bool = False,
     depth: int = 0,
@@ -438,14 +440,14 @@ def score_command(  # noqa: PLR0912,PLR0913,PLR0915,PLR0917 — the decision tab
             raw,
             binary,
             args,
-            privileged,
-            strict,
-            introspect,
-            depth,
-            basedir,
-            seen,
-            defs,
-            offset,
+            privileged=privileged,
+            strict=strict,
+            introspect=introspect,
+            depth=depth,
+            basedir=basedir,
+            seen=seen,
+            defs=defs,
+            offset=offset,
         )
         if resolved:
             return resolved
@@ -616,13 +618,13 @@ def score_command(  # noqa: PLR0912,PLR0913,PLR0915,PLR0917 — the decision tab
 
     # dampeners
     dry = None
-    for pattern, why in DAMPENERS:
-        if why is None:
+    for pattern, note in DAMPENERS:
+        if note is None:
             if binary in DRY_RUN_N_BINS and pattern.search(args_str):
                 dry = "-n: dry run, nothing is written"
             continue
         if pattern.search(args_str):
-            dry = why
+            dry = note
 
     score = max(0, min(100, sum(p for p, *_ in factors)))
     for f in factors:

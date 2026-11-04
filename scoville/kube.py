@@ -76,7 +76,7 @@ KUBE_RESOURCE_ALIASES = {
     "no": "nodes",
     "ing": "ingresses",
     "crd": "customresourcedefinitions",
-    "secret": "secrets",
+    "secret": "secrets",  # nosec B105 - k8s resource name, not a password
     "job": "jobs",
     "cj": "cronjobs",
 }
@@ -119,7 +119,7 @@ def _kubectl(binary: str, args: list[str], timeout: float) -> str | None:
         return None
     try:
         # Read-only `kubectl auth can-i` / `config current-context`, fixed argv.
-        r = subprocess.run(  # noqa: S603
+        r = subprocess.run(  # noqa: S603  # nosec B603 - fixed argv, no shell
             [exe, *args], capture_output=True, text=True, timeout=timeout, check=False
         )
     except (OSError, subprocess.SubprocessError):

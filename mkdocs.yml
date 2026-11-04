@@ -1,9 +1,12 @@
 # scoville docs — MkDocs Material, styled to feel like a product site
 # (premium hero, feature cards, nav tabs, dark/light, local search, edit links)
-# while staying on the portfolio's standard tooling. See docs/stylesheets/extra.css
-# for the look; the accent palette lives there and is the only thing you swap.
+# while staying on the portfolio's standard tooling. See
+# docs/stylesheets/extra.css for the look; the accent palette lives there and
+# is the only thing you swap.
 site_name: scoville
-site_description: "Risk posture for shell commands: score, blast radius and reversibility before you run them."
+site_description: >-
+  Risk posture for shell commands: score, blast radius and reversibility
+  before you run them.
 site_url: https://fabiocicerchia.github.io/scoville/docs/
 repo_url: https://github.com/fabiocicerchia/scoville
 repo_name: fabiocicerchia/scoville
@@ -25,8 +28,9 @@ theme:
   font: false
   language: en
   palette:
-    # Follows the OS by default, with a manual toggle. `primary`/`accent: custom`
-    # hand the colours to extra.css so both schemes share one palette.
+    # Follows the OS by default, with a manual toggle.
+    # `primary`/`accent: custom` hand the colours to extra.css so both schemes
+    # share one palette.
     - media: "(prefers-color-scheme)"
       primary: custom
       accent: custom

@@ -7,10 +7,12 @@ kind: Component
 metadata:
   name: scoville
   description: >-
-      Risk posture for shell commands: score, blast radius and reversibility before you run them
+      Risk posture for shell commands: score, blast radius and reversibility
+      before you run them
   annotations:
     github.com/project-slug: fabiocicerchia/scoville
-    backstage.io/source-location: url:https://github.com/fabiocicerchia/scoville/
+    backstage.io/source-location:
+      url:https://github.com/fabiocicerchia/scoville/
     backstage.io/techdocs-ref: dir:.
   links:
     - url: https://github.com/fabiocicerchia/scoville

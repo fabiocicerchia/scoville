@@ -3,7 +3,9 @@ exists to prevent."""
 
 from __future__ import annotations
 
+import re
 import textwrap
+from collections.abc import Callable
 
 from .amplifiers import AMPS, SOFTENERS
 from .incidents import INCIDENTS
@@ -37,7 +39,7 @@ def _wrap(text: str, indent: str = "  ", width: int = 78, hang: str = "") -> str
     return textwrap.fill(text, width=width, initial_indent=indent, subsequent_indent=indent + hang)
 
 
-def _reachable(entry: Entry, kind: str) -> tuple[list[Entry], list[Entry]]:
+def _reachable(entry: Entry) -> tuple[list[Entry], list[Entry]]:
     """The amplifiers and softeners that can apply to this rule's binaries.
 
     Answers "why this band" with the range the rule can actually reach rather
@@ -45,8 +47,6 @@ def _reachable(entry: Entry, kind: str) -> tuple[list[Entry], list[Entry]]:
     is a `critical` waiting for one flag, and that is the part a reader
     disagreeing with a score needs to see.
     """
-    if kind != "rule":
-        return [], []
     bins, subsumed = entry["bins"], entry["subsumes"]
     # Only the ones named for these binaries. The generic signals apply to
     # every command and listing them under each rule would bury the two or
@@ -67,33 +67,40 @@ def _related(entry: Entry) -> tuple[list[Entry], list[Entry]]:
     return same, beats
 
 
-def _why_head(kind: str, entry: Entry, width: int) -> list[str]:
+def _rule_head(entry: Entry, width: int) -> list[str]:
     """The identity line: what this is, and the three facts a score reports."""
-    if kind == "rule":
-        head = (
-            f"{entry['id']}  ·  base {entry['base']} ({band(entry['base'])})  ·  "
-            f"scope: {entry['scope']}  ·  {entry['revert']}"
-        )
-    else:
-        sign = "softener" if entry["points"] < 0 else "amplifier"
-        head = f"+{entry['id']}  ·  {entry['points']:+d} ({sign})"
-        if entry["scope"] or entry["revert"]:
-            head += f"  ·  scope: {entry['scope'] or '—'}  ·  {entry['revert'] or '—'}"
+    head = (
+        f"{entry['id']}  ·  base {entry['base']} ({band(entry['base'])})  ·  "
+        f"scope: {entry['scope']}  ·  {entry['revert']}"
+    )
     return [head, "=" * min(len(head), width), ""]
 
 
-def _why_matches(kind: str, entry: Entry) -> list[str]:
-    """What it matches, and — as importantly — what it does not."""
-    out = ["MATCHES"]
-    out.append(_wrap(", ".join(sorted(entry["bins"])) if entry["bins"] else "any command"))
-    pattern = entry["sub"] if kind == "rule" else entry["pattern"]
+def _amp_head(entry: Entry, width: int) -> list[str]:
+    """The identity line for an amplifier or softener: its sign and weight."""
+    sign = "softener" if entry["points"] < 0 else "amplifier"
+    head = f"+{entry['id']}  ·  {entry['points']:+d} ({sign})"
+    if entry["scope"] or entry["revert"]:
+        head += f"  ·  scope: {entry['scope'] or '—'}  ·  {entry['revert'] or '—'}"
+    return [head, "=" * min(len(head), width), ""]
+
+
+def _matches_on(entry: Entry, pattern: re.Pattern[str] | None) -> list[str]:
+    """The binaries, and the argument pattern if there is one."""
+    out = ["MATCHES", _wrap(", ".join(sorted(entry["bins"])) if entry["bins"] else "any command")]
     if pattern is not None:
         # Printed unwrapped: a regex broken across lines is not something you
         # can paste back into anything.
         out += ["  …when the arguments match:", f"    {pattern.pattern}"]
-    elif kind == "rule":
+    return out
+
+
+def _rule_matches(entry: Entry) -> list[str]:
+    """What it matches, and — as importantly — what it does not."""
+    out = _matches_on(entry, entry["sub"])
+    if entry["sub"] is None:
         out.append(_wrap("…whatever the arguments are — the binary is the whole of it."))
-    if kind == "rule" and entry["generic"]:
+    if entry["generic"]:
         out.append(
             _wrap(
                 "This is a verb classifier: a floor for CLIs nobody has "
@@ -101,11 +108,16 @@ def _why_matches(kind: str, entry: Entry) -> list[str]:
                 "that scores lower."
             )
         )
-    elif kind == "rule":
+    else:
         out.append(
             _wrap("Not matched: anything a rule with a higher base claims first. Specificity wins before score does.")
         )
     return [*out, ""]
+
+
+def _amp_matches(entry: Entry) -> list[str]:
+    """What an amplifier or softener applies to."""
+    return [*_matches_on(entry, entry["pattern"]), ""]
 
 
 def _why_incident(entry: Entry) -> list[str]:
@@ -126,7 +138,7 @@ def _why_incident(entry: Entry) -> list[str]:
     return [*out, ""]
 
 
-def _why_band(entry: Entry, kind: str) -> list[str]:
+def _why_band(entry: Entry) -> list[str]:
     """Why this band, and what the flags on these binaries can do to it."""
     out = [
         "WHY THIS BAND",
@@ -135,7 +147,7 @@ def _why_band(entry: Entry, kind: str) -> list[str]:
             f"Blast radius `{entry['scope']}`; getting back is `{entry['revert']}`."
         ),
     ]
-    amps, softs = _reachable(entry, kind)
+    amps, softs = _reachable(entry)
     if amps:
         worst = max(amps, key=lambda x: x["points"])
         reached = min(100, entry["base"] + worst["points"])
@@ -197,6 +209,14 @@ def _why_related(entry: Entry) -> list[str]:
     return [*out, ""]
 
 
+# One view per kind of entry: its identity line, then its sections in printed
+# order. A new kind of entry adds a row here, not a branch in every section.
+_VIEWS: dict[str, tuple[Callable[[Entry, int], list[str]], tuple[Callable[[Entry], list[str]], ...]]] = {
+    "rule": (_rule_head, (_rule_matches, _why_incident, _why_band, _why_safer, _why_related)),
+    "amp": (_amp_head, (_amp_matches, _why_incident)),
+}
+
+
 def why_text(rid: str, width: int = 78) -> str | None:
     """The long form for one rule or amplifier, or None if the id is unknown.
 
@@ -212,8 +232,9 @@ def why_text(rid: str, width: int = 78) -> str | None:
     kind, entry = entry_by_id(rid)
     if kind is None or entry is None:
         return None
-    out = _why_head(kind, entry, width) + _why_matches(kind, entry) + _why_incident(entry)
-    if kind == "rule":
-        out += _why_band(entry, kind) + _why_safer(entry) + _why_related(entry)
+    head, sections = _VIEWS[kind]
+    out = head(entry, width)
+    for section in sections:
+        out += section(entry)
     out.append(f"  scoville --list-rules   ·   {len(INCIDENTS)} of {len(rule_ids())} ids have an incident note")
     return "\n".join(out).rstrip() + "\n"

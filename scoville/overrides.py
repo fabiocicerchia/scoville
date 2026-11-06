@@ -80,29 +80,30 @@ def load_config(path: str) -> list[Override]:
     # by someone who did not know about it.
     for action in OVERRIDE_ACTIONS:
         rules: list[Any] = config.get(action) or []
-        for i, raw in enumerate(rules):
-            where = f"{path}: {action}[{i}]"
-            if not isinstance(raw, dict):
-                raise ConfigError(f"{where}: expected an object with `match` and `why`")
-            rule = cast("dict[str, Any]", raw)
-            match = rule.get("match")
-            why = rule.get("why")
-            if not match or not isinstance(match, str):
-                raise ConfigError(f"{where}: needs a `match` glob")
-            # An override with no stated reason is how a config file becomes a
-            # list nobody can safely delete from.
-            if not why or not isinstance(why, str):
-                raise ConfigError(
-                    f"{where}: needs a `why` — an unexplained override is one nobody can safely remove later"
-                )
-            entry: Override = {"action": action, "match": match, "why": why, "source": path}
-            if action == "rescore":
-                level = rule.get("level")
-                if level not in LEVELS:
-                    raise ConfigError(f"{where}: `level` must be one of {', '.join(LEVELS)}, got {level!r}")
-                entry["level"] = level
-            entries.append(entry)
+        entries.extend(_parse_entry(path, action, f"{path}: {action}[{i}]", raw) for i, raw in enumerate(rules))
     return entries
+
+
+def _parse_entry(path: str, action: str, where: str, raw: Any) -> Override:
+    """Validate one allow/deny/rescore entry into an override."""
+    if not isinstance(raw, dict):
+        raise ConfigError(f"{where}: expected an object with `match` and `why`")
+    rule = cast("dict[str, Any]", raw)
+    match = rule.get("match")
+    why = rule.get("why")
+    if not match or not isinstance(match, str):
+        raise ConfigError(f"{where}: needs a `match` glob")
+    # An override with no stated reason is how a config file becomes a
+    # list nobody can safely delete from.
+    if not why or not isinstance(why, str):
+        raise ConfigError(f"{where}: needs a `why` — an unexplained override is one nobody can safely remove later")
+    entry: Override = {"action": action, "match": match, "why": why, "source": path}
+    if action == "rescore":
+        level = rule.get("level")
+        if level not in LEVELS:
+            raise ConfigError(f"{where}: `level` must be one of {', '.join(LEVELS)}, got {level!r}")
+        entry["level"] = level
+    return entry
 
 
 def match_override(entries: list[Entry], command: str) -> Entry | None:

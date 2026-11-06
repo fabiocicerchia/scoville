@@ -162,26 +162,34 @@ def strip_prefix(tokens: list[str]) -> tuple[list[str], bool, list[str]]:
             if base in ("sudo", "doas", "su"):
                 privileged = True
             wrappers.append(base)
-            i += 1
-            while i < len(tokens):
-                t2 = tokens[i]
-                if t2 == "--":
-                    i += 1
-                    break
-                if t2.startswith("-"):
-                    takes_value = t2 in WRAPPER_VALUE_FLAGS
-                    i += 2 if takes_value and i + 1 < len(tokens) else 1
-                    continue
-                if base in ("timeout", "nice", "ionice", "chrt") and re.fullmatch(r"[\d.]+[smhd]?", t2):
-                    i += 1
-                    continue
-                if base == "flock" and (t2.startswith("/") or t2.isdigit()):
-                    i += 1
-                    continue
-                if base == "su" and not t2.startswith("-"):
-                    i += 1  # target user
-                    continue
-                break
+            i = _skip_wrapper_args(base, tokens, i + 1)
             continue
         break
     return tokens[i:], privileged, wrappers
+
+
+def _skip_wrapper_args(base: str, tokens: list[str], i: int) -> int:
+    """Index of the first token after wrapper `base`'s own flags and operands."""
+    while i < len(tokens):
+        t2 = tokens[i]
+        if t2 == "--":
+            return i + 1
+        if t2.startswith("-"):
+            i += 1
+            if t2 in WRAPPER_VALUE_FLAGS and i < len(tokens):
+                i += 1  # the flag's value
+            continue
+        if not _is_wrapper_operand(base, t2):
+            break
+        i += 1
+    return i
+
+
+def _is_wrapper_operand(base: str, t: str) -> bool:
+    """Whether `t` is wrapper `base`'s own operand rather than the wrapped command."""
+    if base in ("timeout", "nice", "ionice", "chrt"):
+        return re.fullmatch(r"[\d.]+[smhd]?", t) is not None
+    if base == "flock":
+        return t.startswith("/") or t.isdigit()
+    # su's operand is the target user; flags were consumed by the caller.
+    return base == "su"

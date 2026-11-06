@@ -17,7 +17,7 @@ Homepage = "https://github.com/fabiocicerchia/scoville"
 Issues = "https://github.com/fabiocicerchia/scoville/issues"
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "build", "basedpyright>=1.40.1"]
+dev = ["pytest", "ruff", "build", "basedpyright>=1.40.2"]
 
 [project.scripts]
 scoville = "scoville:main"

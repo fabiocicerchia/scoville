@@ -24,7 +24,7 @@ def _check(rid: str, scope: str | None, revert: str | None) -> None:
         raise ValueError(msg)
 
 
-def R(  # noqa: N802,PLR0913 — the rule table's columns; see the comment above
+def R(  # noqa: N802,PLR0913,PLR0917 — the rule table's columns; see the comment above
     rid: str,
     # Space-separated, because that is how the table below reads: one string
     # per rule rather than a list literal per row. `.split()` happens once,
@@ -61,7 +61,7 @@ def R(  # noqa: N802,PLR0913 — the rule table's columns; see the comment above
     }
 
 
-def A(  # noqa: N802,PLR0913 — the amplifier table's columns; see above
+def A(  # noqa: N802,PLR0913,PLR0917 — the amplifier table's columns; see above
     aid: str,
     # Space-separated like R's, and None for an amplifier that applies to any
     # command rather than to a named set.

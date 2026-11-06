@@ -175,8 +175,9 @@ def _skip_wrapper_args(base: str, tokens: list[str], i: int) -> int:
         if t2 == "--":
             return i + 1
         if t2.startswith("-"):
-            takes_value = t2 in WRAPPER_VALUE_FLAGS
-            i += 2 if takes_value and i + 1 < len(tokens) else 1
+            i += 1
+            if t2 in WRAPPER_VALUE_FLAGS and i < len(tokens):
+                i += 1  # the flag's value
             continue
         if not _is_wrapper_operand(base, t2):
             break

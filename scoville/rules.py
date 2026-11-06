@@ -9,17 +9,38 @@ from .rules_clis import CLI_RULES
 from .rules_host import HOST_RULES
 from .rules_platform import PLATFORM_RULES
 from .rules_services import SERVICE_RULES
-from .verbs import DESTROY_VERBS as DESTROY_VERBS
-from .verbs import DO_DB as DO_DB
-from .verbs import DO_DELETE as DO_DELETE
-from .verbs import DO_DROPLET as DO_DROPLET
-from .verbs import DO_DROPLET_ACTION as DO_DROPLET_ACTION
-from .verbs import DO_K8S as DO_K8S
-from .verbs import DO_NODE_POOL as DO_NODE_POOL
-from .verbs import READ_ONLY as READ_ONLY
-from .verbs import READ_VERBS as READ_VERBS
-from .verbs import RESOURCE_CLIS as RESOURCE_CLIS
-from .verbs import WRITE_VERBS as WRITE_VERBS
+from .verbs import (
+    DESTROY_VERBS,
+    DO_DB,
+    DO_DELETE,
+    DO_DROPLET,
+    DO_DROPLET_ACTION,
+    DO_K8S,
+    DO_NODE_POOL,
+    READ_ONLY,
+    READ_VERBS,
+    RESOURCE_CLIS,
+    WRITE_VERBS,
+)
+
+# The verb sets moved to verbs.py; listed here so existing `from .rules import ...` keeps working.
+__all__ = [
+    "DESTROY_VERBS",
+    "DO_DB",
+    "DO_DELETE",
+    "DO_DROPLET",
+    "DO_DROPLET_ACTION",
+    "DO_K8S",
+    "DO_NODE_POOL",
+    "FETCHERS",
+    "INTERPRETERS",
+    "READ_ONLY",
+    "READ_VERBS",
+    "RESOURCE_CLIS",
+    "RULES",
+    "SHELLS",
+    "WRITE_VERBS",
+]
 
 # Order is precedence: the first matching rule wins, so the domains are
 # concatenated in the order the single table used to read.

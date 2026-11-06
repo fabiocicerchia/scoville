@@ -235,6 +235,6 @@ def why_text(rid: str, width: int = 78) -> str | None:
     head, sections = _VIEWS[kind]
     out = head(entry, width)
     for section in sections:
-        out += section(entry)
+        out.extend(section(entry))
     out.append(f"  scoville --list-rules   ·   {len(INCIDENTS)} of {len(rule_ids())} ids have an incident note")
     return "\n".join(out).rstrip() + "\n"

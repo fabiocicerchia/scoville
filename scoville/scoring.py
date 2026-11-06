@@ -129,74 +129,74 @@ def path_factors(binary: str, args: list[str]) -> list[FactorTuple]:
     """Score the *targets*. This is where rm and `rm /` part ways."""
     out: list[FactorTuple] = []
     for a in args:
-        if a.startswith("-") or ENV_ASSIGN.match(a) or "=" in a.split("/", 1)[0]:
-            continue
-        m = VAR_PATH.match(a)
-        if m:
-            var, tail = m.group(1), m.group(2) or ""
-            expanded = tail or "/"
-            if expanded in ("/", "//"):
-                out.append(
-                    (
-                        40,
-                        (f"if ${var} is unset or empty this expands to `/` — the classic `rm -rf $DIR/` incident"),
-                        "host",
-                        "irreversible",
-                    )
-                )
-            else:
-                out.append(
-                    (
-                        22,
-                        (f"if ${var} is unset this expands to `{expanded}`, not to the path you meant"),
-                        "host",
-                        None,
-                    )
-                )
-            continue
-        p = a.rstrip("/") or "/"
-        if p in ("/", "/*") or a in ("/", "/*"):
-            out.append(
-                (
-                    50,
-                    "target is the filesystem root: everything the caller can write to",
-                    "host",
-                    "irreversible",
-                )
-            )
-            continue
-        stripped = p.removesuffix("/*")
-        if stripped in SYSTEM_DIRS:
-            out.append((35, f"target is `{stripped}` — {SYSTEM_DIRS[stripped]}", "host", "irreversible"))
-            continue
-        if p in ("~", "$HOME", "${HOME}", "~/*", "$HOME/*"):
-            out.append((28, "target is the user's home directory", "host", "irreversible"))
-            continue
-        parent = "/" + stripped.lstrip("/").split("/")[0] if stripped.startswith("/") else ""
-        if parent in SYSTEM_DIRS and stripped != parent:
-            pts = 18 if parent in CORE_DIRS else 8
-            out.append(
-                (
-                    pts,
-                    f"target lives under `{parent}` — {SYSTEM_DIRS[parent]}",
-                    "host",
-                    "irreversible",
-                )
-            )
-            continue
-        if REGENERABLE.search(p):
-            out.append(
-                (
-                    -25,
-                    (f"`{Path(p).name}` is a regenerable build/dependency directory, not source of truth"),
-                    None,
-                    None,
-                )
-            )
-            continue
-        if p.startswith("/dev/") and binary not in DEVICE_TARGET_EXPECTED:
-            out.append((45, f"target is a device node (`{p}`), not a regular file", "host", "irreversible"))
+        factor = _path_factor(binary, a)
+        if factor:
+            out.append(factor)
     return out
+
+
+def _path_factor(binary: str, a: str) -> FactorTuple | None:
+    """The factor one argument contributes as a target, or None."""
+    if a.startswith("-") or ENV_ASSIGN.match(a) or "=" in a.split("/", 1)[0]:
+        return None
+    m = VAR_PATH.match(a)
+    if m:
+        return _var_path_factor(m.group(1), m.group(2) or "")
+    p = a.rstrip("/") or "/"
+    if p in ("/", "/*") or a in ("/", "/*"):
+        return (
+            50,
+            "target is the filesystem root: everything the caller can write to",
+            "host",
+            "irreversible",
+        )
+    return _dir_factor(binary, p)
+
+
+def _var_path_factor(var: str, tail: str) -> FactorTuple:
+    """A target built on a variable: what it expands to if the variable is unset."""
+    expanded = tail or "/"
+    if expanded in ("/", "//"):
+        return (
+            40,
+            (f"if ${var} is unset or empty this expands to `/` — the classic `rm -rf $DIR/` incident"),
+            "host",
+            "irreversible",
+        )
+    return (
+        22,
+        (f"if ${var} is unset this expands to `{expanded}`, not to the path you meant"),
+        "host",
+        None,
+    )
+
+
+def _dir_factor(binary: str, p: str) -> FactorTuple | None:
+    """A literal, non-root target: system, home, regenerable or device paths."""
+    stripped = p.removesuffix("/*")
+    if stripped in SYSTEM_DIRS:
+        return (35, f"target is `{stripped}` — {SYSTEM_DIRS[stripped]}", "host", "irreversible")
+    if p in ("~", "$HOME", "${HOME}", "~/*", "$HOME/*"):
+        return (28, "target is the user's home directory", "host", "irreversible")
+    parent = "/" + stripped.lstrip("/").split("/")[0] if stripped.startswith("/") else ""
+    if parent in SYSTEM_DIRS and stripped != parent:
+        pts = 18 if parent in CORE_DIRS else 8
+        return (
+            pts,
+            f"target lives under `{parent}` — {SYSTEM_DIRS[parent]}",
+            "host",
+            "irreversible",
+        )
+    if REGENERABLE.search(p):
+        return (
+            -25,
+            (f"`{Path(p).name}` is a regenerable build/dependency directory, not source of truth"),
+            None,
+            None,
+        )
+    if p.startswith("/dev/") and binary not in DEVICE_TARGET_EXPECTED:
+        return (45, f"target is a device node (`{p}`), not a regular file", "host", "irreversible")
+    return None
 
 
 def specific_clis() -> list[str]:

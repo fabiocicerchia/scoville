@@ -96,11 +96,10 @@ thing people paste and nobody audits.
 
 ## Why JSON and not TOML
 
-`tomllib` is 3.11+, and scoville supports 3.10. The two ways round that —
-vendoring a parser, or dropping a supported Python — both cost more than comment
-syntax is worth for a file where every entry already carries a mandatory `why`.
-If the floor ever moves to 3.11, switching is a one-line change in
-`load_config()`.
+JSON was chosen while scoville still supported 3.10, which has no `tomllib`;
+vendoring a parser cost more than comment syntax is worth for a file where every
+entry already carries a mandatory `why`. The floor is now 3.11, so switching is
+a one-line change in `load_config()`.
 
 ## In `--format json`
 

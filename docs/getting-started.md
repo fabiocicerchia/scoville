@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-Python 3.10 or newer. Nothing else — scoville has no runtime dependencies.
+Python 3.11 or newer. Nothing else — scoville has no runtime dependencies.
 
 ## Install
 

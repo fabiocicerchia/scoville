@@ -50,11 +50,10 @@ def find_config(basedir: str) -> str | None:
 def load_config(path: str) -> list[Override]:
     """Parse and validate a config file into a list of override entries.
 
-    JSON, not TOML. `tomllib` is 3.11+ and scoville supports 3.10, and the two
-    ways round that — vendoring a parser, or dropping a supported version — both
-    cost more than the comment syntax is worth for a file whose every entry
-    already carries a mandatory `why`. Switching is a one-line change if the
-    floor ever moves.
+    JSON, not TOML. Chosen while scoville still supported 3.10, which has no
+    `tomllib`; vendoring a parser cost more than the comment syntax is worth for
+    a file whose every entry already carries a mandatory `why`. The floor is now
+    3.11, so switching is a one-line change.
     """
     try:
         with Path(path).open(encoding="utf-8") as fh:

@@ -14,13 +14,107 @@ from .kube import KUBE_TIMEOUT_DEFAULT
 from .output import PEPPERS, SCALES, label, overall, paint, public, render_text
 from .overrides import ConfigError, apply_overrides, find_config, gated, load_config
 from .rules import RULES
-from .scales import LEVELS, Override
+from .scales import LEVELS, Override, Result
 from .scoring import analyze
 from .version import __version__
 from .why import rule_ids, why_text
 
 
-def main(  # noqa: PLR0911,PLR0912,PLR0915 — argument handling: one arm per flag, one exit code per failure
+def _why(name: str) -> int:
+    """Print the long form for one rule or amplifier id; 64 when there is none."""
+    text = why_text(name)
+    if text is not None:
+        sys.stdout.write(text)
+        return 0
+    sys.stderr.write(f"scoville: no rule or amplifier called {name!r}\n")
+    # A near miss is the common case — an id read off a finding with a
+    # typo, or half remembered. Guessing is cheaper than --list-rules.
+    wanted: str = str(name).strip().lstrip("+").upper()
+    near = difflib.get_close_matches(wanted, rule_ids(), n=3, cutoff=0.5)
+    if near:
+        sys.stderr.write(f"scoville: did you mean {', '.join(near)}?\n")
+    else:
+        sys.stderr.write("scoville: --list-rules prints every id\n")
+    return 64
+
+
+def _list_rules() -> None:
+    """Print every rule and amplifier."""
+    for r in sorted(RULES, key=lambda x: x["id"]):
+        if not r["bins"]:
+            continue
+        bins = ", ".join(sorted(r["bins"])[:6])
+        sys.stdout.write(f"{r['id']:<18} {r['base']:>3}  {bins}: {r['why']}\n")
+    for a in AMPS:
+        bins = ", ".join(sorted(a["bins"])[:4]) if a["bins"] else "any"
+        sys.stdout.write(f"{'+' + a['id']:<18} {a['points']:>+3}  {bins}: {a['why']}\n")
+
+
+def _read_input(args: argparse.Namespace, p: argparse.ArgumentParser) -> str | None:
+    """The text to analyse, or None (after saying why) when there is none."""
+    if args.file:
+        try:
+            with Path(args.file).open(encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError as e:
+            sys.stderr.write(f"scoville: {e}\n")
+            return None
+    elif args.command and args.command != ["-"]:
+        text = "\n".join(args.command)
+    elif not sys.stdin.isatty():
+        text = sys.stdin.read()
+    else:
+        p.print_usage(sys.stderr)
+        return None
+
+    if not text.strip():
+        sys.stderr.write("scoville: nothing to analyze\n")
+        return None
+    return text
+
+
+def _load_entries(args: argparse.Namespace, basedir: str) -> list[Override] | None:
+    """The override entries in force, or None (after saying why) on a bad config."""
+    # An explicit --config that does not exist is an error, not a shrug: the
+    # caller asked for a policy and running without it would silently apply a
+    # different one than they think.
+    entries: list[Override] = []
+    if not args.no_config:
+        config_path = args.config or find_config(basedir)
+        if args.config and not Path(args.config).is_file():
+            sys.stderr.write(f"scoville: {args.config}: no such file\n")
+            return None
+        if config_path:
+            try:
+                entries = load_config(config_path)
+            except ConfigError as e:
+                sys.stderr.write(f"scoville: {e}\n")
+                return None
+    return entries
+
+
+def _report(results: list[Result], args: argparse.Namespace) -> None:
+    """Write the results in the format the caller asked for."""
+    summary = overall(results)
+    if args.format == "json":
+        json.dump({"overall": summary, "commands": public(results)}, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    elif args.quiet:
+        for r in results:
+            sys.stdout.write(f"{label(r['level'], args.scale, slug=True):<15} {r['score']:>3}  {r['command']}\n")
+    else:
+        color = not args.no_color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+        sys.stdout.write(render_text(results, args.file or None, color, args.verbose, args.scale))
+        plural = "" if summary["commands"] == 1 else "s"
+        heat = f" ({PEPPERS[summary['level']][3]})" if args.scale == "peppers" else ""
+        sys.stdout.write(
+            f"scoville: {summary['commands']} command{plural}, worst "
+            f"{paint(label(summary['level'], args.scale), summary['level'], color)}{heat} "
+            f"{summary['score']}/100 · scope {summary['scope']} · {summary['reversibility']}\n"
+        )
+
+
+def main(
     argv: list[str] | None = None,
 ) -> int:
     """CLI entry point. Returns the process exit status.
@@ -91,71 +185,18 @@ def main(  # noqa: PLR0911,PLR0912,PLR0915 — argument handling: one arm per fl
     args = p.parse_args(argv)
 
     if args.why:
-        text = why_text(args.why)
-        if text is None:
-            # The tool's output
-            print(f"scoville: no rule or amplifier called {args.why!r}", file=sys.stderr)  # noqa: T201
-            # A near miss is the common case — an id read off a finding with a
-            # typo, or half remembered. Guessing is cheaper than --list-rules.
-            wanted: str = str(args.why).strip().lstrip("+").upper()
-            near = difflib.get_close_matches(wanted, rule_ids(), n=3, cutoff=0.5)
-            if near:
-                print(f"scoville: did you mean {', '.join(near)}?", file=sys.stderr)  # noqa: T201 — the tool's output
-            else:
-                print("scoville: --list-rules prints every id", file=sys.stderr)  # noqa: T201 — the tool's output
-            return 64
-        print(text, end="")  # noqa: T201 — the tool's output
-        return 0
-
+        return _why(args.why)
     if args.list_rules:
-        for r in sorted(RULES, key=lambda x: x["id"]):
-            if not r["bins"]:
-                continue
-            bins = ", ".join(sorted(r["bins"])[:6])
-            print(f"{r['id']:<18} {r['base']:>3}  {bins}: {r['why']}")  # noqa: T201 — the tool's output
-        for a in AMPS:
-            bins = ", ".join(sorted(a["bins"])[:4]) if a["bins"] else "any"
-            print(f"{'+' + a['id']:<18} {a['points']:>+3}  {bins}: {a['why']}")  # noqa: T201 — the tool's output
+        _list_rules()
         return 0
 
-    source = None
-    if args.file:
-        try:
-            with Path(args.file).open(encoding="utf-8", errors="replace") as fh:
-                text = fh.read()
-        except OSError as e:
-            print(f"scoville: {e}", file=sys.stderr)  # noqa: T201 — the tool's output
-            return 64
-        source = args.file
-    elif args.command and args.command != ["-"]:
-        text = "\n".join(args.command)
-    elif not sys.stdin.isatty():
-        text = sys.stdin.read()
-    else:
-        p.print_usage(sys.stderr)
+    text = _read_input(args, p)
+    if text is None:
         return 64
-
-    if not text.strip():
-        print("scoville: nothing to analyze", file=sys.stderr)  # noqa: T201 — the tool's output
-        return 64
-
     basedir = str(Path(args.file).resolve().parent) if args.file else str(Path.cwd())
-
-    # An explicit --config that does not exist is an error, not a shrug: the
-    # caller asked for a policy and running without it would silently apply a
-    # different one than they think.
-    entries: list[Override] = []
-    if not args.no_config:
-        config_path = args.config or find_config(basedir)
-        if args.config and not Path(args.config).is_file():
-            print(f"scoville: {args.config}: no such file", file=sys.stderr)  # noqa: T201 — the tool's output
-            return 64
-        if config_path:
-            try:
-                entries = load_config(config_path)
-            except ConfigError as e:
-                print(f"scoville: {e}", file=sys.stderr)  # noqa: T201 — the tool's output
-                return 64
+    entries = _load_entries(args, basedir)
+    if entries is None:
+        return 64
 
     results = apply_overrides(
         analyze(
@@ -167,27 +208,7 @@ def main(  # noqa: PLR0911,PLR0912,PLR0915 — argument handling: one arm per fl
         ),
         entries,
     )
-    summary = overall(results)
-
-    if args.format == "json":
-        json.dump({"overall": summary, "commands": public(results)}, sys.stdout, indent=2)
-        print()  # noqa: T201 — the tool's output
-    elif args.quiet:
-        for r in results:
-            # The tool's output
-            print(f"{label(r['level'], args.scale, slug=True):<15} {r['score']:>3}  {r['command']}")  # noqa: T201
-    else:
-        color = not args.no_color and sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
-        out = render_text(results, source, color, args.verbose, args.scale)
-        if out:
-            print(out, end="")  # noqa: T201 — the tool's output
-        plural = "" if summary["commands"] == 1 else "s"
-        heat = f" ({PEPPERS[summary['level']][3]})" if args.scale == "peppers" else ""
-        print(  # noqa: T201 — the tool's output
-            f"scoville: {summary['commands']} command{plural}, worst "
-            f"{paint(label(summary['level'], args.scale), summary['level'], color)}{heat} "
-            f"{summary['score']}/100 · scope {summary['scope']} · {summary['reversibility']}"
-        )
+    _report(results, args)
 
     # The summary reports what the commands really score; the gate ignores the
     # ones this repo has explicitly allowed. Reporting an allowed command as

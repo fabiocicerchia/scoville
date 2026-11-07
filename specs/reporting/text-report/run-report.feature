@@ -8,12 +8,12 @@ Feature: Reading the result of a run
     When the operator scores the command "rm -rf /"
     Then the last line starts "scoville: 1 command, worst <label>"
     And it then gives 100/100, the widest scope and the least reversible outcome
-    And with the pepper scale the label carries its heat marker in brackets
+    And with the pepper scale the label is followed by its heat in brackets, "(1.6-2.2M SHU)"
 
     Examples:
-      | scale   | label                               |
-      | bands   | CRITICAL                            |
-      | peppers | CAROLINA REAPER (with chilli marks) |
+      | scale   | label                    |
+      | bands   | CRITICAL                 |
+      | peppers | 🌶🌶🌶🌶 CAROLINA REAPER |
 
   @id:reporting.text-report.002 @rule:reporting.text-report.quiet-one-line-per-command @verified @source:scoville/cli.py#_report @test:tests/test_scoville.py#test_quiet_uses_ascii_slugs
   Scenario: Quiet mode prints one greppable line per command

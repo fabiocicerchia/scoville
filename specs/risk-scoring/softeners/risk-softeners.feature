@@ -40,7 +40,7 @@ Feature: Lowering the score for the careful way of asking
     Then the command is rated critical
 
   @id:risk-scoring.softeners.004 @rule:risk.softeners.short-n-is-dry-run-only-on-known-tools @verified @source:scoville/scoring.py#score_command @test:tests/test_scoville.py#test_assume_no_is_the_mirror @questionable
-  Scenario Outline: A bare -n counts as a dry run only for tools where it means one
+  Scenario Outline: A bare -n counts as a dry run only for a fixed list of tools, even where -n means something else
     Given no repository policy applies
     When the operator scores "<command>"
     Then the report <outcome> the factor "-n: dry run, nothing is written"

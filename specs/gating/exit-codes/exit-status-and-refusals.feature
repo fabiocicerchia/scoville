@@ -15,7 +15,7 @@ Feature: Refusing runs that cannot be scored
       | no command, no file, and an interactive terminal on stdin | usage: scoville [-h] ...                                   |
       | the command given is only whitespace                      | scoville: nothing to analyze                               |
       | the file deploy.sh does not exist                         | scoville: [Errno 2] No such file or directory: 'deploy.sh' |
-      | the discovered .scovillerc is not valid JSON              | scoville: (path) not valid JSON                            |
+      | the discovered .scovillerc is not valid JSON              | scoville: (path): not valid JSON                           |
 
   @id:gating.exit-codes.002 @rule:gating.exit-codes.bad-arguments-exit-2 @inferred @source:scoville/cli.py#main @questionable
   Scenario Outline: An unrecognised option or invalid choice exits with status 2
@@ -33,7 +33,7 @@ Feature: Refusing runs that cannot be scored
   Scenario: Cutting the report short with a pager or head is only quiet when run as a module
     Given the report is piped into a reader that closes early, such as head -1
     When the operator runs the installed scoville command on a long script
-    Then the quiet exit 0, and the exit 130 on Ctrl-C, only apply under python -m scoville.cli
+    Then the quiet exit 0 on a closed pipe only applies under python -m scoville.cli
     And the installed command can print a broken-pipe traceback instead
 
   @id:gating.exit-codes.004 @rule:gating.version-reporting.prints-version @inferred @source:scoville/cli.py#main

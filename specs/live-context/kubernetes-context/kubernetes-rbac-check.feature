@@ -50,7 +50,7 @@ Feature: Checking a kubectl command against the cluster's own permissions
     Examples:
       | answer                       |
       | no context at all            |
-      | nothing                      |
+      | no reply at all              |
       | an empty reply               |
       | error: You must be logged in |
       | maybe                        |

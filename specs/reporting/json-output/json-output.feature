@@ -12,4 +12,4 @@ Feature: Consuming results as JSON
     Then the document has an "overall" object with score, level, scope, reversibility, commands and worst
     And "overall.worst" is "rm -rf /etc"
     And the document has a "commands" list with one entry per command, each listing its factors
-    And commands found inside another command appear under that command's "carries" in the same shape
+    And the commands a wrapper runs on its behalf (a script, a function, a container payload) appear under that command's "carries" in the same shape

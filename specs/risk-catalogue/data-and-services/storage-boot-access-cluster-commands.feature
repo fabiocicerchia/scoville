@@ -55,7 +55,7 @@ Feature: Scoring storage, boot, access and cluster commands
     And the reason given is that unloading the module can remove the host's storage or network driver
 
   @id:risk-catalogue.data-and-services.016 @rule:data.exposure.widening-access-is-flagged @verified @source:scoville/rules_services.py#SERVICE_RULES @test:tests/test_corpus.py#test_corpus_command_scores_as_catalogued
-  Scenario Outline: Making data public or minting broad credentials is flagged
+  Scenario Outline: Making data public, minting broad credentials or disabling access control is flagged
     Given the command is <command>
     When the operator scores the command
     Then the command is reported at level <level>

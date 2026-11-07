@@ -11,7 +11,7 @@ Feature: Scoring the command a wrapper carries
     When the operator scores <wrapped command> run in web through <wrapper>
     Then the command is reported at level <level>
     And the wrapped command is listed as carried, with a factor naming the payload and saying it runs inside the container
-    And the score is no higher than the same payload scored directly on the host
+    And the payload's share of the score is no higher than the same payload scored directly on the host
 
     Examples:
       | wrapper     | wrapped command                                  | level    |

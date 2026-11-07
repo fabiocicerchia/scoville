@@ -11,12 +11,12 @@ Feature: Raising the score for the dangerous way of asking
     When the operator scores "<command>"
     Then the command is rated <level>
     And its reversibility is <reversibility>
-    And each step of the escalation scores above the one before it
+    And each step of the escalation scores at least as high as the one before it
 
     Examples:
       | command                     | level            | reversibility |
-      | rm notes.txt                | medium           | reversible    |
-      | rm -rf ./build-output       | medium or higher | reversible    |
+      | rm notes.txt                | medium           | irreversible  |
+      | rm -rf ./build-output       | medium or higher | irreversible  |
       | rm -rf /                    | critical         | irreversible  |
       | rm -rf --no-preserve-root / | critical         | irreversible  |
 
@@ -36,8 +36,8 @@ Feature: Raising the score for the dangerous way of asking
       | frobctl delete cluster -y                      | frobctl delete cluster           | auto-confirms every prompt                                                     |
 
   @id:risk-scoring.amplifiers.003 @rule:risk.amplifiers.no-double-counting @verified @source:scoville/scoring.py#score_command @test:tests/test_scoville.py#test_a_rule_does_not_also_collect_the_amp_it_exists_for @test:tests/test_scoville.py#test_a_rule_that_prices_its_own_yes_does_not_double_count @test:tests/test_scoville.py#test_verification_disabled_is_generic
-  Scenario Outline: A flag the matching rule already prices is not counted a second time
-    Given a rule exists because of the flag on the command
+  Scenario Outline: A flag that is already priced is not counted a second time
+    Given the flag on the command is already priced by the matching rule or by another amplifier
     When the operator scores "<command>"
     Then <outcome>
 
@@ -59,15 +59,16 @@ Feature: Raising the score for the dangerous way of asking
       | rm -rf node_modules   | below rm -rf /srv/data                     |
 
   @id:risk-scoring.amplifiers.005 @rule:risk.amplifiers.device-node-target @inferred @source:scoville/scoring.py#_dir_factor
-  Scenario Outline: Pointing an ordinary file tool at a device node is flagged, but disk tools are not
+  Scenario Outline: A device node target is flagged as living under /dev, for file tools and disk tools alike
     Given no repository policy applies
     When the operator scores "<command>"
-    Then the report <outcome> the factor "target is a device node"
+    Then the report <outcome> the factor "target lives under `/dev` — device nodes"
+    And the report does not list the factor "target is a device node"
 
     Examples:
-      | command              | outcome       |
-      | cp disk.img /dev/sdb | lists         |
-      | wipefs /dev/sdb      | does not list |
+      | command              | outcome |
+      | cp disk.img /dev/sdb | lists   |
+      | wipefs /dev/sdb      | lists   |
 
   @id:risk-scoring.amplifiers.006 @rule:risk.amplifiers.widen-scope-and-reversibility @verified @source:scoville/amplifiers.py#AMPS @test:tests/test_scoville.py#test_privileged_and_host_mount_widen_the_scope @test:tests/test_scoville.py#test_open_to_the_world_is_generic
   Scenario Outline: An amplifier can widen how far the damage reaches

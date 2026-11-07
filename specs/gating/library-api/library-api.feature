@@ -15,5 +15,5 @@ Feature: Scoring commands from Python
 
     Examples:
       | command      | level    | reversibility |
-      | rm notes.txt | medium   | -             |
+      | rm notes.txt | medium   | irreversible  |
       | rm -rf /     | critical | irreversible  |

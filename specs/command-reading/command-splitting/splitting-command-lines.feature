@@ -16,9 +16,9 @@ Feature: Splitting a command line into the commands it runs
     Examples:
       | line                           |
       | cd /tmp && ls -la; rm -rf /var |
-      | ls || rm -rf /var              |
-      | ls | rm -rf /var               |
-      | ls |& rm -rf /var              |
+      | ls \|\| rm -rf /var            |
+      | ls \| rm -rf /var              |
+      | ls \|& rm -rf /var             |
       | ls & rm -rf /var               |
       | ls\nrm -rf /var                |
       | (cd /tmp && rm -rf /var)       |
@@ -33,7 +33,7 @@ Feature: Splitting a command line into the commands it runs
     Examples:
       | line                                      | count |
       | echo 'a; b' && echo c                     | 2     |
-      | echo "a | b" && echo c                    | 2     |
+      | echo "a \| b" && echo c                   | 2     |
       | find . -name '*.log' -exec rm {} \; && ls | 2     |
 
   @id:command-reading.command-splitting.003 @rule:command-reading.splitting.comments-ignored @verified @source:scoville/parsing.py#split_commands @test:tests/test_scoville.py#test_comments_and_shebangs_are_ignored

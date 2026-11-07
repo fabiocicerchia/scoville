@@ -3,10 +3,10 @@ Feature: Rating commands that change the local machine
   Gives operators and hook authors a calibrated rating for everyday host commands (files, devices, services, networking, packages, eval), so that a harmless inspection passes and a lockout or wipe is stopped before it runs.
 
   Background:
-    Given Given scoville scores commands without running them
+    Given scoville scores commands without running them
 
   @id:risk-catalogue.host-and-files.004 @rule:host.reads.inspection-is-safe @verified @source:scoville/rules_host.py#HOST_RULES @test:tests/test_corpus.py#test_corpus_command_scores_as_catalogued @test:tests/test_scoville.py#test_ifup_is_fine_ifdown_is_not
-  Scenario Outline: Commands that only inspect the host are rated safe
+  Scenario Outline: Commands that only inspect the host, or only bring an interface up, are rated safe
     When the operator scores "<command>"
     Then the command is rated "safe"
 
@@ -23,7 +23,7 @@ Feature: Rating commands that change the local machine
       | ifup eth0               |
 
   @id:risk-catalogue.host-and-files.005 @rule:host.system.subcommand-decides-rating @verified @source:scoville/rules_host.py#HOST_RULES @test:tests/test_corpus.py#test_corpus_command_scores_as_catalogued @test:tests/test_scoville.py#test_crontab_r
-  Scenario Outline: The subcommand decides the rating, so undoing or querying scores below the destructive form of the same binary
+  Scenario Outline: The subcommand or option decides the rating, so undoing or querying scores below the destructive form of the same binary
     When the operator scores "<command>"
     Then the command is rated "<level>"
 
@@ -68,7 +68,7 @@ Feature: Rating commands that change the local machine
       | iptables -P INPUT DROP     | high   |
 
   @id:risk-catalogue.host-and-files.008 @rule:host.exec.eval-is-high @verified @source:scoville/rules_host.py#HOST_RULES @test:tests/test_scoville.py#test_eval_is_high_because_nothing_can_read_it @test:tests/test_scoville.py#test_source_is_a_readable_wrapper_not_an_eval @test:tests/test_corpus.py#test_corpus_command_scores_as_catalogued
-  Scenario Outline: Any eval is rated high because what it runs cannot be read from the line
+  Scenario Outline: Any eval is rated high because what it runs cannot be read from the line, while source scores lower
     When the operator scores "<command>"
     Then the command is rated "<level>"
 

@@ -98,7 +98,7 @@ Feature: Rating source control, container, cluster and cloud commands
       | helm uninstall api                      | high   |
 
   @id:risk-catalogue.source-control-and-containers.012 @rule:platform.cloud.account-wide-destruction-is-critical @verified @source:scoville/rules_platform.py#PLATFORM_RULES @test:tests/test_corpus.py#test_corpus_command_scores_as_catalogued @test:tests/test_scoville.py#test_aws_read_is_free_write_is_not
-  Scenario Outline: Cloud commands that destroy data, keys or whole accounts are rated highest
+  Scenario Outline: Cloud commands are rated by what they destroy, and losing data, keys or whole accounts is rated highest
     Given a cloud CLI logged in to an account
     When the operator scores "<command>"
     Then the command is rated "<level>"

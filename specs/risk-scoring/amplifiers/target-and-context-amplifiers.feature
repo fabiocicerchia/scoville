@@ -48,7 +48,7 @@ Feature: Raising the score for dangerous targets and remote code
     When the operator scores `<command>`
     Then the level is high
     And a factor says the file was downloaded earlier in this same snippet
-    And no factor calls the script merely opaque
+    And no factor says the commands are inside the script, not on this line
 
     Examples:
       | command                                                                  |

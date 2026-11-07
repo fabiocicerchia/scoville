@@ -32,6 +32,6 @@ Feature: Gating a pipeline or hook on a command's risk
     And the exit status is <exit>
 
     Examples:
-      | command                   | level | exit |
-      | kubectl delete ns ci-1234 | high  | 0    |
-      | kubectl delete ns prod    | high  | 1    |
+      | command                   | level    | exit |
+      | kubectl delete ns ci-1234 | high     | 0    |
+      | kubectl delete ns prod    | critical | 1    |

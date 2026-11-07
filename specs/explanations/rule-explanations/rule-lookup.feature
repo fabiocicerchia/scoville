@@ -32,5 +32,5 @@ Feature: Looking up why a rule fired
   Scenario: Listing rules prints every rule and amplifier with its points and the commands it matches
     When the operator lists the rules
     Then each rule shows its id, base score, up to six matched commands and its reason
-    And each amplifier shows its id with a plus sign, its signed points, up to four matched commands or any, and its reason
+    And each amplifier shows its id with a plus sign, its signed points, up to four matched commands or any, and its reason; softeners are not listed
     And the exit status is 0

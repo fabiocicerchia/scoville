@@ -6,8 +6,8 @@ Feature: Scoring database and data-service commands
     Given scoville is scoring a command without running it
 
   @id:risk-catalogue.data-and-services.007 @rule:data.databases.destructive-statements-are-high-or-critical @verified @source:scoville/rules_services.py#SERVICE_RULES @test:tests/test_corpus.py#test_corpus_command_scores_as_catalogued @test:tests/test_scoville.py#test_sql_without_where_clause
-  Scenario Outline: Destructive database statements land in the high or critical band
-    Given a database client command carries the statement <command>
+  Scenario Outline: Destructive database statements land in the high or critical band, and access grants in medium
+    Given the command is <command>
     When the operator scores the command
     Then the command is reported at level <level>
 
@@ -38,7 +38,7 @@ Feature: Scoring database and data-service commands
     Then the command is reported at level low
 
   @id:risk-catalogue.data-and-services.010 @rule:data.services.wiping-brokers-and-schemas-is-high-or-critical @verified @source:scoville/rules_services.py#SERVICE_RULES @test:tests/test_corpus.py#test_corpus_command_scores_as_catalogued
-  Scenario Outline: Resetting brokers, write-ahead logs or migration schemas lands in the high or critical band
+  Scenario Outline: Resetting brokers, write-ahead logs or migration schemas lands in the high or critical band, while an immediate stop is medium
     Given the command is <command>
     When the operator scores the command
     Then the command is reported at level <level>

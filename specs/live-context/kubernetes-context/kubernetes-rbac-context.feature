@@ -34,7 +34,7 @@ Feature: Weighing a kubectl command against what the current context may do
     Given the current kube context is "kind-kind"
     And the cluster answers "yes" to deleting namespaces and "yes" to doing anything on anything
     When the operator scores "kubectl delete ns prod" with --introspect
-    Then the score is 10 points higher than without --introspect
+    Then a 10-point cluster-admin factor raises the score above the score without --introspect, capped at 100
     And the blast radius is "cluster"
     And a factor says context "kind-kind" is cluster-admin and no RBAC boundary is left to catch a mistake
 
@@ -57,7 +57,7 @@ Feature: Weighing a kubectl command against what the current context may do
       | command                                  | question                          |
       | kubectl apply deploy web                 | patch deployments                 |
       | kubectl delete ns prod                   | delete namespaces                 |
-      | kubectl delete pod/foo                   | delete pods                       |
+      | kubectl delete pod/foo                   | delete pod                        |
       | kubectl -n kube-system delete deploy x   | delete deployments in kube-system |
       | kubectl delete deploy x --namespace=prod | delete deployments in prod        |
       | kubectl delete -l app=x pods             | delete pods                       |
@@ -69,7 +69,7 @@ Feature: Weighing a kubectl command against what the current context may do
     And the cluster answers "no" for a resource type it does not know
     When the operator scores "<command>" with --introspect
     Then the cluster is asked whether the context may "<question>"
-    And the score is 30 points lower than without --introspect
+    And a 30-point refusal factor lowers the score below the score without --introspect
 
     Examples:
       | command                                    | question             |

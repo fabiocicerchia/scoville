@@ -9,7 +9,7 @@ Feature: Reading the risk report
   Scenario: The run verdict is the worst command, not an average
     Given a script with the commands "cd /tmp && ls -la; rm -rf /var"
     When the operator scores the script
-    Then the summary line reads "scoville: <n> commands, worst CRITICAL"
+    Then the summary line reads "scoville: 3 commands, worst CRITICAL"
     And the summary shows the highest score of any command in the script
     And the summary shows the widest scope and the least reversible outcome found in any command
 
@@ -43,7 +43,7 @@ Feature: Reading the risk report
     Given a command whose rule suggests a safer alternative
     And the command scores at level <level>
     When the operator scores the command
-    Then the line "↳ safer: <advice>" is <shown>
+    Then a "↳ safer:" line with that alternative is <shown>
 
     Examples:
       | level    | shown     |

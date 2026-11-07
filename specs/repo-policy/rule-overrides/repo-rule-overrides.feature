@@ -3,20 +3,20 @@ Feature: Re-rating commands for a repository
   Lets a team tell scoville, in a reviewed .scovillerc file, that a command is routine, forbidden or differently risky in their repository, so the gate stays switched on instead of being turned off the first time it blocks legitimate work.
 
   Background:
-    Given Given a repository whose .scovillerc is in force for the analysed commands
+    Given a repository whose .scovillerc is in force for the analysed commands
 
   @id:repo-policy.rule-overrides.001 @rule:policy.overrides.allow-keeps-score-but-opens-gate @verified @source:scoville/overrides.py#apply_overrides @test:tests/test_scoville.py#test_allow_keeps_the_real_score_but_does_not_trip_the_gate @test:tests/test_scoville.py#test_an_unallowed_command_still_trips_the_gate
   Scenario Outline: An allowed command keeps its real score but does not trip the gate
     Given the .scovillerc allows "kubectl delete ns ci-*" because "routine CI teardown"
     When the operator scores "<command>" with --fail-on high
     Then the command is reported at level "<level>" with score <score>
-    And the factor trace for an allowed command ends with "allowed by .scovillerc: routine CI teardown (scored high, does not trip --fail-on)"
+    And only the command the allow matches has a factor trace ending with "allowed by .scovillerc: routine CI teardown (scored high, does not trip --fail-on)"
     And scoville exits with status <exit>
 
     Examples:
       | command                   | level | score | exit |
       | kubectl delete ns ci-1234 | high  | 80    | 0    |
-      | kubectl delete ns prod    | high  | 80    | 1    |
+      | kubectl delete ns prod    | critical | 95 | 1    |
 
   @id:repo-policy.rule-overrides.002 @rule:policy.overrides.deny-forces-critical @verified @source:scoville/overrides.py#apply_overrides @test:tests/test_scoville.py#test_deny_forces_critical_whatever_the_command_scores
   Scenario: A denied command is critical whatever it would otherwise score

@@ -23,7 +23,7 @@ Feature: Presenting the documentation in one self-contained brand theme
       | surface                      | element                               |
       | the splash page              | the install label and plain links     |
       | the docs home hero           | the gradient title and primary button |
-      | the docs in the light scheme | the header chrome and links           |
+      | the docs in the light scheme | the links                             |
 
   @id:docs.documentation-site.docs-theme.003 @rule:docs.theme.dark-scheme-legibility @inferred @source:docs/stylesheets/extra.css#[data-md-color-scheme="slate"]
   Scenario: In the dark scheme links use the lighter accent on a deep navy ground

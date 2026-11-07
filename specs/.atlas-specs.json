@@ -1,0 +1,3698 @@
+{
+ "excluded": {
+  "examples/basic": [
+   {
+    "candidate": "kubectl delete ns is scored critical",
+    "covered_by": "risk-catalogue/source-control-and-containers (the kubectl rule; owned by the scoring module, not this example)",
+    "reason": "DUPLICATE_OF",
+    "source": "examples/basic/deploy.sh"
+   },
+   {
+    "candidate": "An unguarded variable expansion in rm -rf raises the score",
+    "covered_by": "risk-scoring/amplifiers (the unguarded-variable amplifier, owned by the scoring module)",
+    "reason": "DUPLICATE_OF",
+    "source": "examples/basic/deploy.sh"
+   },
+   {
+    "candidate": "JSON output of the example includes every factor",
+    "covered_by": "reporting/json-output",
+    "reason": "DUPLICATE_OF",
+    "source": "examples/basic/README.md"
+   },
+   {
+    "candidate": "The shellcheck/pre-commit exclusion for the example script",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": ".pre-commit-config.yaml"
+   },
+   {
+    "candidate": "set -euo pipefail header in the sample",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "examples/basic/deploy.sh"
+   },
+   {
+    "candidate": "The basic example script fails a high-risk gate while its harmless lines stay low",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "examples/basic/deploy.sh#deploy.sh"
+   }
+  ],
+  "scoville/amplifiers": [
+   {
+    "candidate": "Exact point values of each amplifier (e.g. RECURSIVE +15, FORCE-RM +8)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/amplifiers.py#AMPS"
+   },
+   {
+    "candidate": "Per-CLI amplifiers (doctl, vault, velero, argocd, fly, gh, kubectl, terraform, aws, umount, power, packages)",
+    "covered_by": "risk.amplifiers.generic-arguments-on-any-binary",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/amplifiers.py#AMPS"
+   },
+   {
+    "candidate": "REMOTE-EXEC-SUBST: script fetched inside a substitution is critical",
+    "covered_by": "risk.amplifiers.widen-scope-and-reversibility",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/amplifiers.py#AMPS"
+   },
+   {
+    "candidate": "Amplifier ids and their order in the list",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/amplifiers.py#AMPS"
+   },
+   {
+    "candidate": "Re-export of the tables from the package namespace",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/__init__.py"
+   },
+   {
+    "candidate": "Amplifier entries refuse an unknown scope",
+    "covered_by": "risk-catalogue/catalogue-integrity",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/catalog.py#A"
+   },
+   {
+    "candidate": "Home directory as a target is critical",
+    "covered_by": "risk.amplifiers.system-directory-targets",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/scoring.py#_dir_factor"
+   },
+   {
+    "candidate": "Softener --preserve-root, BACKUP, INTERACTIVE and force-with-lease individual permutations",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/amplifiers.py#SOFTENERS"
+   }
+  ],
+  "scoville/carriers": [
+   {
+    "candidate": "Nested wrappers are unwrapped at most three levels deep",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#score_command"
+   },
+   {
+    "candidate": "docker compose exec/run is treated like docker exec/run",
+    "covered_by": "wrapped-commands.container.payload-scored-in-container",
+    "reason": "TRIVIAL",
+    "source": "scoville/carriers.py#carried_command"
+   },
+   {
+    "candidate": "The ansible target host is the first argument, or 'inventory' when the first argument is a flag",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/carriers.py#carried_command"
+   },
+   {
+    "candidate": "The ssh value-taking flags (-i, -p, -o, ...) are skipped before the host",
+    "covered_by": "wrapped-commands.remote.payload-scored-on-target",
+    "reason": "TRIVIAL",
+    "source": "scoville/carriers.py#SSH_VALUE_FLAGS"
+   },
+   {
+    "candidate": "The CONTEXTS weight/scope/note table and its re-export from the scoville package",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/carriers.py#CONTEXTS"
+   },
+   {
+    "candidate": "Resolving a hidden entrypoint with --introspect",
+    "covered_by": "live-context/container-introspection (introspection module)",
+    "reason": "UNVERIFIABLE",
+    "source": "scoville/scoring.py#score_command"
+   }
+  ],
+  "scoville/catalog": [
+   {
+    "candidate": "Command names in a rule are written as one space-separated string and split into a set",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/catalog.py#R"
+   },
+   {
+    "candidate": "Rule and amplifier entries are built as dicts with fixed keys (id, bins, sub, base, why, advice, generic, paths, subsumes / pattern, points, raw)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/catalog.py#R"
+   },
+   {
+    "candidate": "A specific rule always beats a generic verb rule, even when it scores lower (R docstring)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "scoville/catalog.py#R"
+   },
+   {
+    "candidate": "An amplifier with no command names applies to any command",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "scoville/catalog.py#A"
+   },
+   {
+    "candidate": "Validation raises ValueError rather than assert so it survives python -O",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/catalog.py#_check"
+   }
+  ],
+  "scoville/cli": [
+   {
+    "candidate": "--strict, --introspect and --kube-timeout are passed through to scoring",
+    "covered_by": "scoring and kube modules own the observable behaviour",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/cli.py#main"
+   },
+   {
+    "candidate": "--verbose shows zero-weight factors",
+    "covered_by": "text rendering in scoville/output.py",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/cli.py#_report"
+   },
+   {
+    "candidate": "Malformed .scovillerc contents are refused (missing why, unknown key, bad level)",
+    "covered_by": "gating.exit-codes.unscorable-input-refused",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/cli.py#_load_entries"
+   },
+   {
+    "candidate": "--why and --list-rules take precedence over any command input",
+    "covered_by": "explanations.rule-explanations.why-prints-long-form",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/cli.py#main"
+   },
+   {
+    "candidate": "No input on an interactive terminal prints usage",
+    "covered_by": "gating.exit-codes.unscorable-input-refused",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/cli.py#_read_input"
+   },
+   {
+    "candidate": "argparse help text and description",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/cli.py#main"
+   }
+  ],
+  "scoville/definitions": [
+   {
+    "candidate": "Destructive-verb floor (+40) for unknown CLIs (UNKNOWN_DESTROY pattern)",
+    "covered_by": "the rule is applied in scoville/scoring.py and belongs to risk-scoring/unknown-commands; this module only holds the pattern",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/definitions.py#UNKNOWN_DESTROY"
+   },
+   {
+    "candidate": "A bare `name()` token is scored safe as a function definition (FUNC_DEF)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/definitions.py#FUNC_DEF"
+   },
+   {
+    "candidate": "Variable-path recognition pattern (VAR_PATH)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/definitions.py#VAR_PATH"
+   },
+   {
+    "candidate": "Factor prefixes (payload, resolved entrypoint/wrapper/function, rbac)",
+    "covered_by": "the visible wording is asserted inside command-reading.functions-and-aliases.alias-expanded-before-scoring",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/definitions.py#PAYLOAD"
+   },
+   {
+    "candidate": "Both `name() {` and `function name {` spellings are recognised",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/definitions.py#FUNC_HEAD_KW"
+   },
+   {
+    "candidate": "Direct and mutual recursion end, and calling a helper twice scores both calls",
+    "covered_by": "enforced by the call-stack guard in the scoring module, not in definitions",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#_score_local_definition"
+   }
+  ],
+  "scoville/dockerfile": [
+   {
+    "candidate": "Multi-stage build: build a wheel in the build stage and copy only the wheel to the runtime stage",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile"
+   },
+   {
+    "candidate": "Base images pinned by sha256 digest (python:3.14-slim)",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile"
+   },
+   {
+    "candidate": "Build backend installed from a hash-pinned requirements-build.txt with build isolation off, so the wheel build downloads nothing",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile"
+   },
+   {
+    "candidate": "Runtime install uses --no-deps and --no-cache-dir, then deletes the wheel",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Dockerfile"
+   },
+   {
+    "candidate": "HEALTHCHECK only checks that the Python interpreter starts",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "Dockerfile"
+   },
+   {
+    "candidate": "WORKDIR /app as the runtime working directory",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "Dockerfile"
+   }
+  ],
+  "scoville/incidents": [
+   {
+    "candidate": "An incident note naming an id that is not in the rule catalogue fails the suite",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "tests/test_scoville.py#test_incident_notes_cannot_name_a_rule_that_does_not_exist"
+   },
+   {
+    "candidate": "The number of incident notes must not fall below a floor (126)",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "tests/test_scoville.py#test_incident_note_coverage_does_not_regress"
+   },
+   {
+    "candidate": "Each note is longer than 180 characters and ends with a full stop or exclamation mark",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "tests/test_scoville.py#test_incident_notes_are_prose_not_placeholders"
+   },
+   {
+    "candidate": "INCIDENTS is re-exported from the scoville package",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/__init__.py"
+   },
+   {
+    "candidate": "The text of each individual incident note (about 120 entries)",
+    "covered_by": "explanations.incidents.note-printed-for-rule-or-amplifier",
+    "reason": "TRIVIAL",
+    "source": "scoville/incidents.py#INCIDENTS"
+   },
+   {
+    "candidate": "Notes are wrapped to the terminal width",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/why.py#_why_incident"
+   }
+  ],
+  "scoville/introspection": [
+   {
+    "candidate": "Each docker inspect call is bounded by a 5 second timeout",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/introspection.py#_docker"
+   },
+   {
+    "candidate": "Inspect output is parsed as entrypoint|cmd|user|ref, with bad JSON treated as empty",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/introspection.py#introspect_target"
+   },
+   {
+    "candidate": "A target that is missing or starts with '-' is not inspected",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/introspection.py#introspect_target"
+   },
+   {
+    "candidate": "An image with no entrypoint or cmd resolves to 'entrypoint <none>' and adds no payload factor",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/introspection.py#introspect_target"
+   },
+   {
+    "candidate": "introspect_target is exported from the scoville package",
+    "covered_by": "gating/library-api",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/__init__.py"
+   },
+   {
+    "candidate": "A resolved entrypoint is scored without further introspection",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#score_command"
+   }
+  ],
+  "scoville/kube": [
+   {
+    "candidate": "Only kubectl/oc/k lines are checked; rm and docker lines make no cluster call",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#analyze_command"
+   },
+   {
+    "candidate": "A kubectl command with no resource (e.g. `kubectl version`) is not checked",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/scoring.py#kube_rbac_factors"
+   },
+   {
+    "candidate": "Context name read via `kubectl config current-context` before asking can-i",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/kube.py#kube_context"
+   },
+   {
+    "candidate": "can-i stdout read regardless of exit code",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/kube.py#_kubectl"
+   },
+   {
+    "candidate": "KUBE_* tables and kube_* functions re-exported from the package",
+    "covered_by": "gating/library-api",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/__init__.py"
+   },
+   {
+    "candidate": "Without introspection no cluster is asked anything",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "scoville/scoring.py#analyze_command"
+   }
+  ],
+  "scoville/makefile": [
+   {
+    "candidate": "Running `make` with no target prints the grouped list of targets taken from their ## comments",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#help"
+   },
+   {
+    "candidate": "make setup installs the pre-commit hook",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#setup"
+   },
+   {
+    "candidate": "make dev does an editable install with dev dependencies",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#dev"
+   },
+   {
+    "candidate": "make install installs the package with pip",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#install"
+   },
+   {
+    "candidate": "make lint runs every pre-commit hook over all files (CLAUDE.md still describes it as 'Run ruff')",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#lint"
+   },
+   {
+    "candidate": "make test runs pytest quietly",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#test"
+   },
+   {
+    "candidate": "make build builds the sdist and wheel",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#build"
+   },
+   {
+    "candidate": "make inventory regenerates INVENTORY.md from tests/corpus.tsv via tests/render_inventory.py",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#inventory"
+   },
+   {
+    "candidate": "make run prints scoville --help",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#run"
+   },
+   {
+    "candidate": "make format rewrites sources with ruff format",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#format"
+   },
+   {
+    "candidate": "make analyze type-checks the package with basedpyright",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "Makefile#analyze"
+   }
+  ],
+  "scoville/output": [
+   {
+    "candidate": "paint(): ANSI colour codes per level",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/output.py#paint"
+   },
+   {
+    "candidate": "Deciding when colour is on (tty, NO_COLOR, --no-color) is done by the CLI module, not here",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "scoville/cli.py#_report"
+   },
+   {
+    "candidate": "MARKS table (ok/\u00b7/!/!!/XX) is defined but never used in rendering",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "scoville/output.py#MARKS"
+   },
+   {
+    "candidate": "Label column padding widths (10 for bands, 25 for peppers, emoji counted as two columns)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/output.py#render_text"
+   },
+   {
+    "candidate": "overall() for an empty run returns 0, safe, none, reversible (CLI exits 64 before this)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/output.py#overall"
+   },
+   {
+    "candidate": "Internal 'keep' render hint removed from JSON factors",
+    "covered_by": "reporting.json.overall-and-commands",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/output.py#public"
+   },
+   {
+    "candidate": "Factors flagged keep (wrappers, functions, overrides) always shown even at 0 points",
+    "covered_by": "reporting.text.zero-weight-factors-hidden",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/output.py#render_text"
+   },
+   {
+    "candidate": "Band scale shows upper-case level names, lower-case under --quiet",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/output.py#label"
+   },
+   {
+    "candidate": "Library re-exports of label, paint, render_text, overall, public, PEPPERS, SCALES",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/__init__.py"
+   }
+  ],
+  "scoville/overrides": [
+   {
+    "candidate": "Overrides match with fnmatch globs against the whole command string, not regexes",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/overrides.py#match_override"
+   },
+   {
+    "candidate": "Within one action, the first matching entry wins",
+    "covered_by": "policy.overrides.deny-beats-allow",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/overrides.py#match_override"
+   },
+   {
+    "candidate": "Overrides are also applied to commands carried inside shell functions",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/overrides.py#apply_overrides"
+   },
+   {
+    "candidate": "Re-scoring to the band a command is already in reports 'pinned at <level>' and lowers the score to the band floor",
+    "covered_by": "policy.overrides.rescore-pins-band",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/overrides.py#apply_overrides"
+   },
+   {
+    "candidate": "An unreadable config file (OS error) is refused with the path and error",
+    "covered_by": "policy.overrides.malformed-config-refused",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/overrides.py#load_config"
+   },
+   {
+    "candidate": "An entry that is not an object is refused ('expected an object with `match` and `why`')",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/overrides.py#_parse_entry"
+   },
+   {
+    "candidate": "Empty or null action lists are treated as no entries",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/overrides.py#load_config"
+   },
+   {
+    "candidate": "No config found means no overrides and results pass through unchanged",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/overrides.py#apply_overrides"
+   },
+   {
+    "candidate": "SCORE_FOR_LEVEL, CONFIG_NAMES, OVERRIDE_ACTIONS and the override functions are re-exported from the scoville package",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/__init__.py"
+   }
+  ],
+  "scoville/parsing": [
+   {
+    "candidate": "Byte offset and line number of each split command",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/parsing.py#split_commands"
+   },
+   {
+    "candidate": "Preceding-operator tracking used to detect fetch-pipe-to-shell",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/parsing.py#split_commands"
+   },
+   {
+    "candidate": "split_commands/tokenize/strip_prefix/subshell_commands re-exported as library functions",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/__init__.py"
+   },
+   {
+    "candidate": "Wrapper list returned alongside the stripped tokens",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/parsing.py#strip_prefix"
+   },
+   {
+    "candidate": "`--` ends a wrapper's own options",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/parsing.py#_skip_wrapper_args"
+   },
+   {
+    "candidate": "Per-wrapper operand forms (timeout/nice/ionice/chrt durations, flock paths or descriptors)",
+    "covered_by": "command-reading.wrappers.wrapped-command-scored",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/parsing.py#_is_wrapper_operand"
+   },
+   {
+    "candidate": "Path-qualified wrapper (/usr/bin/sudo) recognised by basename",
+    "covered_by": "command-reading.wrappers.wrapped-command-scored",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/parsing.py#strip_prefix"
+   },
+   {
+    "candidate": "Nested $( ) only the innermost substitution is extracted",
+    "covered_by": "command-reading.splitting.substitutions-scored",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/parsing.py#subshell_commands"
+   }
+  ],
+  "scoville/rules": [
+   {
+    "candidate": "__all__ re-exports of verb sets from verbs.py for backward-compatible imports",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules.py#__all__"
+   },
+   {
+    "candidate": "RULES concatenates host, platform, service and CLI rule lists in a fixed order",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules.py#RULES"
+   },
+   {
+    "candidate": "SHELLS set used to unwrap `sh -c` payloads",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules.py#SHELLS"
+   },
+   {
+    "candidate": "Fetching and decoding through process substitution or eval (bash <(curl \u2026), eval \"$(curl \u2026)\") is critical",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "scoville/rules.py#FETCHERS"
+   }
+  ],
+  "scoville/rules-clis": [
+   {
+    "candidate": "Per-CLI flags that widen or soften the same command (argocd --prune/--cascade=false, gh pr merge --admin/--auto, fly --stage, doctl --dangerous/-f/--tag-name, vault -prefix, -output-curl-string)",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "scoville/amplifiers.py"
+   },
+   {
+    "candidate": "ARGOCD-APP-SYNC suppresses the generic PURGE-FLAG and FORCE amplifiers (subsumes)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules_clis.py#CLI_RULES"
+   },
+   {
+    "candidate": "Lists of which CLIs are enumerated and which are verb-classified (specific_clis/generic_clis) match docs/rules.md",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "scoville/scoring.py#specific_clis"
+   },
+   {
+    "candidate": "Each doctl rule matches its own command by rule id (beyond the band)",
+    "covered_by": "catalogue.doctl.aliases-match-long-forms",
+    "reason": "DUPLICATE_OF",
+    "source": "tests/test_scoville.py#test_each_doctl_rule_matches_its_own_command"
+   },
+   {
+    "candidate": "Individual band per rule for heroku, zfs and btrfs, LVM and mdadm, ceph and rbd, nomad, pulumi, eksctl, the remaining openstack resources, fly certs, postgres, secret setting and scaling, the remaining doctl resources, the remaining gh subcommands, and the remaining argocd subcommands",
+    "covered_by": "catalogue.promoted-clis.resource-decides-score",
+    "reason": "TRIVIAL",
+    "source": "scoville/rules_clis.py#CLI_RULES"
+   },
+   {
+    "candidate": "Promoting flyctl moves flyctl deploy from low to medium",
+    "covered_by": "catalogue.resource-clis.specific-rule-beats-verb",
+    "reason": "DUPLICATE_OF",
+    "source": "tests/test_scoville.py#test_promoting_a_cli_can_move_a_verb_off_the_generic_score"
+   },
+   {
+    "candidate": "Rules refuse an undefined scope or reversibility at load",
+    "covered_by": "risk-catalogue/catalogue-integrity (catalog module)",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/catalog.py#R"
+   },
+   {
+    "candidate": "Remediation advice text per rule (e.g. snapshot first, --dry-run first)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/rules_clis.py#CLI_RULES"
+   }
+  ],
+  "scoville/rules-host": [
+   {
+    "candidate": "Shell builtins and keywords (cd, export, if/then, for) score zero",
+    "covered_by": "command-reading/command-splitting treats shell structure",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules_host.py#HOST_RULES"
+   },
+   {
+    "candidate": "EXEC-FORKBOMB and SEC-PIPE-SHELL placeholder entries with no binaries",
+    "covered_by": "fork bomb and curl|sh detection live in scoring, not this table",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules_host.py#HOST_RULES"
+   },
+   {
+    "candidate": "sed -i.bak scores below sed -i",
+    "covered_by": "risk-scoring/softeners",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/amplifiers.py"
+   },
+   {
+    "candidate": "Per-rule advice and why text shown in reports",
+    "covered_by": "explanations/rule-explanations",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/rules_host.py#HOST_RULES"
+   },
+   {
+    "candidate": "Individual ratings for rm, secure-overwrite tools, truncate, dd, mv, cp, chmod, chown, userdel, passwd, visudo, kill, sysctl, swapoff, history -c, nc -e, tc, npm run, make",
+    "covered_by": "budget: same rule shape as the kept outlines; each is pinned by tests/corpus.tsv",
+    "reason": "TRIVIAL",
+    "source": "scoville/rules_host.py#HOST_RULES"
+   },
+   {
+    "candidate": "rm -rf on root, home or unguarded variables scoring critical",
+    "covered_by": "risk-scoring/amplifiers",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/amplifiers.py"
+   },
+   {
+    "candidate": "PKG-FORCE subsumes the generic FORCE amplifier",
+    "covered_by": "risk-scoring/amplifiers",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules_host.py#HOST_RULES"
+   },
+   {
+    "candidate": "Rules refuse an undefined scope or reversibility at load",
+    "covered_by": "risk-catalogue/catalogue-integrity",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/catalog.py#_check"
+   }
+  ],
+  "scoville/rules-platform": [
+   {
+    "candidate": "Exec and run carriers are scored on their payload / hidden ENTRYPOINT (CTR-EXEC, CTR-RUN)",
+    "covered_by": "command-reading/wrapped-commands and live-context/container-introspection",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/rules_platform.py#PLATFORM_RULES"
+   },
+   {
+    "candidate": "Dry-run flags drop platform deletes to safe",
+    "covered_by": "risk-scoring/softeners",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/rules_platform.py#PLATFORM_RULES"
+   },
+   {
+    "candidate": "Force-push to main scores above a feature branch; -auto-approve raises terraform destroy to critical",
+    "covered_by": "risk-scoring/amplifiers",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/rules_platform.py#PLATFORM_RULES"
+   },
+   {
+    "candidate": "Specific rule beats generic verb classifier even when lower",
+    "covered_by": "platform.kubernetes.cascading-deletes-outrank-restarts",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/scoring.py#pick_rule"
+   },
+   {
+    "candidate": "Per-rule safer-alternative hints (lease-guarded push, stash before reset)",
+    "covered_by": "explanations/rule-explanations",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/rules_platform.py#PLATFORM_RULES"
+   },
+   {
+    "candidate": "Per-rule scope and reversibility labels (cluster, account, irreversible)",
+    "covered_by": "risk-scoring/blast-radius and risk-scoring/reversibility",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/rules_platform.py#PLATFORM_RULES"
+   },
+   {
+    "candidate": "subsumes= markers suppressing FORCE / PURGE-FLAG amplifiers",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules_platform.py#PLATFORM_RULES"
+   },
+   {
+    "candidate": "IAC-TAINT's apply -replace alternative is shadowed by IAC-APPLY (higher base)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/rules_platform.py#PLATFORM_RULES"
+   },
+   {
+    "candidate": "GIT-READ matches bare `git branch` only; short-flag clusters like -fu not seen as force",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "scoville/rules_platform.py#PLATFORM_RULES"
+   },
+   {
+    "candidate": "Individual base scores per rule",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules_platform.py#PLATFORM_RULES"
+   }
+  ],
+  "scoville/rules-services": [
+   {
+    "candidate": "SYS-SYSRQ placeholder rule (empty binary list, base 0, why 'placeholder') that can never match",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules_services.py#SERVICE_RULES"
+   },
+   {
+    "candidate": "Per-rule blast radius and reversibility values (account, host, cluster, network; irreversible, recoverable)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/rules_services.py#SERVICE_RULES"
+   },
+   {
+    "candidate": "Per-rule why and advice wording shown in reports and explanations",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/rules_services.py#SERVICE_RULES"
+   },
+   {
+    "candidate": "UPDATE without WHERE (DB-UPDATE-ALL), mongorestore/mysqlimport --drop, sqlite3 and clickhouse variants of the DROP rules",
+    "covered_by": "data.databases.destructive-statements-are-high-or-critical",
+    "reason": "TRIVIAL",
+    "source": "scoville/rules_services.py#SERVICE_RULES"
+   },
+   {
+    "candidate": "Granting AdministratorAccess or binding cluster-admin (SEC-IAM-ADMIN, SEC-K8S-ADMIN), which have no corpus row",
+    "covered_by": "data.exposure.widening-access-is-flagged",
+    "reason": "TRIVIAL",
+    "source": "scoville/rules_services.py#SERVICE_RULES"
+   },
+   {
+    "candidate": "Device-level secure erase via nvme/hdparm/sg_format and LUKS key-slot removal variants",
+    "covered_by": "data.storage.device-erasure-is-critical-or-high",
+    "reason": "TRIVIAL",
+    "source": "scoville/rules_services.py#SERVICE_RULES"
+   },
+   {
+    "candidate": "Specific subcommand rule beats generic verb rule when picking a rule",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#pick_rule"
+   },
+   {
+    "candidate": "Rule entries are validated for scope and reversibility on load",
+    "covered_by": "risk-catalogue/catalogue-integrity (catalog module)",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/catalog.py#R"
+   }
+  ],
+  "scoville/scales": [
+   {
+    "candidate": "Type aliases Entry, Result, Definition, Factor, FactorTuple, Override",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scales.py#Entry"
+   },
+   {
+    "candidate": "band() returns safe for a score below every threshold (negative)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/scales.py#band"
+   },
+   {
+    "candidate": "TOP_BAND_BASE (35) decides whether --why says a missing safer alternative is a gap in the rule; 35 is the medium band even though the comment calls it the top band",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scales.py#TOP_BAND_BASE"
+   },
+   {
+    "candidate": "Run-wide verdict takes the widest scope and hardest reversibility across all commands",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/output.py#overall"
+   },
+   {
+    "candidate": "LEVELS, BANDS, SCOPES, REVERT re-exported from the scoville package",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scales.py#LEVELS"
+   }
+  ],
+  "scoville/scoring": [
+   {
+    "candidate": "specific_clis / generic_clis derive which resource CLIs are enumerated vs verb-classified",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#specific_clis"
+   },
+   {
+    "candidate": "Each factor carries the id of the rule that produced it, or none",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#_factor"
+   },
+   {
+    "candidate": "Carrier recursion stops at 3 levels",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#score_command"
+   },
+   {
+    "candidate": "Payload files over 256 KB are not read",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/scoring.py#_read"
+   },
+   {
+    "candidate": "Makefile recipe parsing (tab lines, @/-/+ stripped, no variable expansion)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#_make_recipe"
+   },
+   {
+    "candidate": "A self-referential script terminates under introspection",
+    "covered_by": "functions.resolve.recursion-stops",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/scoring.py#score_command"
+   },
+   {
+    "candidate": "A line that is only wrappers or env assignments yields no result",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/scoring.py#score_command"
+   },
+   {
+    "candidate": "Function definition lines score zero",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/scoring.py#score_command"
+   },
+   {
+    "candidate": "Scope is the widest and reversibility the hardest of all factors",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#score_command"
+   },
+   {
+    "candidate": "Resolved container/image entrypoint scored, +8 when the image runs as root",
+    "covered_by": "",
+    "reason": "UNVERIFIABLE",
+    "source": "scoville/scoring.py#score_command"
+   },
+   {
+    "candidate": "kube_timeout bounds the RBAC check",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#analyze"
+   }
+  ],
+  "scoville/scoville": [
+   {
+    "candidate": "Package docstring examples (scoville 'rm -rf /', -f deploy.sh --format json, --fail-on high)",
+    "covered_by": "CLI behaviours owned by scoville/cli (input sources, json output, fail thresholds)",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/__init__.py#__doc__"
+   },
+   {
+    "candidate": "main re-exported as the console script entry point scoville:main",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "scoville/__init__.py#main"
+   },
+   {
+    "candidate": "Re-export of rule tables, amplifier sets, regexes and constants (RULES, AMPS, BANDS, CORE_DIRS, WRAPPERS, FUNC_DEF, KUBE_TIMEOUT_DEFAULT, ...)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/__init__.py#__all__"
+   },
+   {
+    "candidate": "Re-export of helpers (tokenize, split_commands, pick_rule, path_factors, paint, label, find_config, apply_overrides, why_text, ...) whose behaviour belongs to their defining modules",
+    "covered_by": "the scenarios of the defining modules (parsing, scoring, output, overrides, why)",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/__init__.py#__all__"
+   },
+   {
+    "candidate": "Type aliases Result, Factor, Override, Definition exported",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scales.py#Result"
+   }
+  ],
+  "scoville/verbs": [
+   {
+    "candidate": "READ_ONLY list of everyday inspection tools (ls, cat, grep, ps...) scores safe",
+    "covered_by": "the READ baseline rule in scoville/rules_host.py (host-and-files module), which owns it",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/verbs.py#READ_ONLY"
+   },
+   {
+    "candidate": "Which CLIs are enumerated versus verb-classified (specific_clis / generic_clis lists for docs)",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/scoring.py#specific_clis"
+   },
+   {
+    "candidate": "Verb constants re-exported from scoville.rules and the package for backward-compatible imports",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/rules.py"
+   },
+   {
+    "candidate": "DO_K8S delete closed with (?!-) so delete-selective/delete-node reach their own rules",
+    "covered_by": "catalogue.resource-clis.doctl-aliases-match",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/verbs.py#DO_K8S"
+   },
+   {
+    "candidate": "Resource CLI with no recognised verb at all",
+    "covered_by": "catalogue.resource-clis.verb-must-lead (scored as an unknown command; unknown-command scoring belongs to risk-scoring/unknown-commands)",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/scoring.py#pick_rule"
+   },
+   {
+    "candidate": "Per-verb permutations of the write and destroy lists (tag, label, revoke, expire...)",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/verbs.py#WRITE_VERBS"
+   },
+   {
+    "candidate": "A CLI-specific rule takes precedence over verb classification, even when it scores lower",
+    "covered_by": "catalogue.resource-clis.specific-rule-beats-verb",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/scoring.py#pick_rule"
+   }
+  ],
+  "scoville/version": [
+   {
+    "candidate": "release-please rewrites the version string in scoville/version.py on each release",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "release-please-config.json"
+   },
+   {
+    "candidate": "The version lives in its own module so other modules can import it without an import cycle",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/version.py"
+   },
+   {
+    "candidate": "The version is also declared separately in pyproject.toml and must be kept in step with it",
+    "covered_by": "",
+    "reason": "TECH_BUILD",
+    "source": "pyproject.toml"
+   }
+  ],
+  "scoville/why": [
+   {
+    "candidate": "Unknown id exits 64 and suggests the closest ids or points at --list-rules",
+    "covered_by": "explanations.id-suggestions (owned by scoville/cli; why.py only returns None and supplies rule_ids)",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/cli.py#_why"
+   },
+   {
+    "candidate": "Footer counting how many ids have an incident note",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/why.py#why_text"
+   },
+   {
+    "candidate": "Text wrapping at 78 columns, regex printed unwrapped",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/why.py#_wrap"
+   },
+   {
+    "candidate": "Incident notes may not name ids that do not exist; coverage floor; notes are prose",
+    "covered_by": "",
+    "reason": "TECH_DEVTOOLING",
+    "source": "tests/test_scoville.py#test_incident_notes_cannot_name_a_rule_that_does_not_exist"
+   },
+   {
+    "candidate": "View table mapping entry kind to sections",
+    "covered_by": "",
+    "reason": "INTERNAL_MECHANISM",
+    "source": "scoville/why.py#_VIEWS"
+   },
+   {
+    "candidate": "entry_by_id, rule_ids, why_text exported from the package",
+    "covered_by": "gating/library-api (owned by scoville/__init__)",
+    "reason": "DUPLICATE_OF",
+    "source": "scoville/__init__.py"
+   },
+   {
+    "candidate": "Rule with no argument pattern says the binary is the whole match; rule with no binaries says 'any command'",
+    "covered_by": "",
+    "reason": "TRIVIAL",
+    "source": "scoville/why.py#_rule_matches"
+   }
+  ]
+ },
+ "lifted": {
+  "examples/basic": [],
+  "scoville/amplifiers": [],
+  "scoville/carriers": [],
+  "scoville/catalog": [],
+  "scoville/cli": [
+   {
+    "from_source": "scoville/overrides.py#gated",
+    "rule": "gating.fail-thresholds.allowed-commands-do-not-trip-gate"
+   }
+  ],
+  "scoville/definitions": [],
+  "scoville/dockerfile": [],
+  "scoville/incidents": [],
+  "scoville/introspection": [
+   {
+    "from_source": "scoville/introspection.py#_docker",
+    "rule": "live-context.container-introspection.never-pulls-unresolved"
+   }
+  ],
+  "scoville/kube": [],
+  "scoville/makefile": [],
+  "scoville/output": [],
+  "scoville/overrides": [],
+  "scoville/parsing": [],
+  "scoville/rules": [],
+  "scoville/rules-clis": [],
+  "scoville/rules-host": [],
+  "scoville/rules-platform": [],
+  "scoville/rules-services": [],
+  "scoville/scales": [],
+  "scoville/scoring": [],
+  "scoville/scoville": [],
+  "scoville/verbs": [],
+  "scoville/version": [],
+  "scoville/why": []
+ },
+ "retired": [],
+ "scenarios": {
+  "command-reading.command-splitting.001": {
+   "file": "specs/command-reading/command-splitting/splitting-command-lines.feature",
+   "fingerprint": "1e9f3a611398",
+   "human": false,
+   "rule": "command-reading.splitting.every-command-scored",
+   "source": "scoville/parsing.py#split_commands",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_sequences_split_and_worst_wins",
+   "tests": [
+    "tests/test_scoville.py#test_sequences_split_and_worst_wins"
+   ]
+  },
+  "command-reading.command-splitting.002": {
+   "file": "specs/command-reading/command-splitting/splitting-command-lines.feature",
+   "fingerprint": "1e9f3a611398",
+   "human": false,
+   "rule": "command-reading.splitting.quoted-separators-stay-literal",
+   "source": "scoville/parsing.py#split_commands",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_quotes_are_not_split_on",
+   "tests": [
+    "tests/test_scoville.py#test_quotes_are_not_split_on"
+   ]
+  },
+  "command-reading.command-splitting.003": {
+   "file": "specs/command-reading/command-splitting/splitting-command-lines.feature",
+   "fingerprint": "1e9f3a611398",
+   "human": false,
+   "rule": "command-reading.splitting.comments-ignored",
+   "source": "scoville/parsing.py#split_commands",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_comments_and_shebangs_are_ignored",
+   "tests": [
+    "tests/test_scoville.py#test_comments_and_shebangs_are_ignored"
+   ]
+  },
+  "command-reading.command-splitting.004": {
+   "file": "specs/command-reading/command-splitting/splitting-command-lines.feature",
+   "fingerprint": "31e7d488d960",
+   "human": false,
+   "rule": "command-reading.splitting.substitutions-scored",
+   "source": "scoville/parsing.py#subshell_commands",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_command_substitution_is_analyzed",
+   "tests": [
+    "tests/test_scoville.py#test_command_substitution_is_analyzed"
+   ]
+  },
+  "command-reading.command-splitting.005": {
+   "file": "specs/command-reading/command-splitting/splitting-command-lines.feature",
+   "fingerprint": "c0f3ca853026",
+   "human": false,
+   "rule": "command-reading.splitting.broken-quoting-still-scored",
+   "source": "scoville/parsing.py#tokenize",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "command-reading.command-splitting.006": {
+   "file": "specs/command-reading/command-splitting/splitting-command-lines.feature",
+   "fingerprint": "1e9f3a611398",
+   "human": false,
+   "rule": "command-reading.splitting.ampersand-redirections-split",
+   "source": "scoville/parsing.py#split_commands",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "command-reading.functions-and-aliases.001": {
+   "file": "specs/command-reading/functions-and-aliases/script-defined-functions-and-aliases.feature",
+   "fingerprint": "2bc217200a27",
+   "human": false,
+   "rule": "command-reading.functions-and-aliases.function-call-scored-as-body",
+   "source": "scoville/definitions.py#collect_definitions",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_function_call_is_scored_as_its_body",
+   "tests": [
+    "tests/test_scoville.py#test_a_function_call_is_scored_as_its_body"
+   ]
+  },
+  "command-reading.functions-and-aliases.002": {
+   "file": "specs/command-reading/functions-and-aliases/script-defined-functions-and-aliases.feature",
+   "fingerprint": "2bc217200a27",
+   "human": false,
+   "rule": "command-reading.functions-and-aliases.alias-expanded-before-scoring",
+   "source": "scoville/definitions.py#collect_definitions",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_an_alias_shadowing_a_binary_is_expanded",
+   "tests": [
+    "tests/test_scoville.py#test_an_alias_shadowing_a_binary_is_expanded"
+   ]
+  },
+  "command-reading.functions-and-aliases.003": {
+   "file": "specs/command-reading/functions-and-aliases/script-defined-functions-and-aliases.feature",
+   "fingerprint": "25bb07c42676",
+   "human": false,
+   "rule": "command-reading.functions-and-aliases.resolution-requires-introspect",
+   "source": "scoville/definitions.py#definition_at",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_resolution_is_opt_in",
+   "tests": [
+    "tests/test_scoville.py#test_resolution_is_opt_in"
+   ]
+  },
+  "command-reading.functions-and-aliases.004": {
+   "file": "specs/command-reading/functions-and-aliases/script-defined-functions-and-aliases.feature",
+   "fingerprint": "25bb07c42676",
+   "human": false,
+   "rule": "command-reading.functions-and-aliases.definition-in-scope-at-call",
+   "source": "scoville/definitions.py#definition_at",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_function_defined_after_the_call_is_not_applied",
+   "tests": [
+    "tests/test_scoville.py#test_a_function_defined_after_the_call_is_not_applied",
+    "tests/test_scoville.py#test_the_last_definition_before_the_call_wins",
+    "tests/test_scoville.py#test_a_name_is_resolved_at_the_call_site_not_the_definition"
+   ]
+  },
+  "command-reading.functions-and-aliases.005": {
+   "file": "specs/command-reading/functions-and-aliases/script-defined-functions-and-aliases.feature",
+   "fingerprint": "2bc217200a27",
+   "human": false,
+   "rule": "command-reading.functions-and-aliases.only-the-scored-text-is-read",
+   "source": "scoville/definitions.py#collect_definitions",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_nothing_outside_the_analysed_text_is_read",
+   "tests": [
+    "tests/test_scoville.py#test_nothing_outside_the_analysed_text_is_read"
+   ]
+  },
+  "command-reading.functions-and-aliases.006": {
+   "file": "specs/command-reading/functions-and-aliases/script-defined-functions-and-aliases.feature",
+   "fingerprint": "ca2e948f13aa",
+   "human": false,
+   "rule": "command-reading.functions-and-aliases.function-body-read-whole",
+   "source": "scoville/definitions.py#_balanced_body",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_an_unterminated_function_body_is_skipped_not_half_scored",
+   "tests": [
+    "tests/test_scoville.py#test_an_unterminated_function_body_is_skipped_not_half_scored",
+    "tests/test_scoville.py#test_a_function_body_containing_braces_is_read_whole"
+   ]
+  },
+  "command-reading.functions-and-aliases.007": {
+   "file": "specs/command-reading/functions-and-aliases/local-functions-and-aliases.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "functions.resolve.opt-in-under-introspect",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_resolution_is_opt_in",
+   "tests": [
+    "tests/test_scoville.py#test_resolution_is_opt_in",
+    "tests/test_scoville.py#test_a_function_call_is_scored_as_its_body",
+    "tests/test_scoville.py#test_an_alias_shadowing_a_binary_is_expanded"
+   ]
+  },
+  "command-reading.functions-and-aliases.008": {
+   "file": "specs/command-reading/functions-and-aliases/local-functions-and-aliases.feature",
+   "fingerprint": "a211e33a652b",
+   "human": false,
+   "rule": "functions.resolve.call-scored-as-body",
+   "source": "scoville/scoring.py#_score_local_definition",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_function_call_is_scored_as_its_body",
+   "tests": [
+    "tests/test_scoville.py#test_a_function_call_is_scored_as_its_body",
+    "tests/test_scoville.py#test_an_alias_shadowing_a_binary_is_expanded"
+   ]
+  },
+  "command-reading.functions-and-aliases.009": {
+   "file": "specs/command-reading/functions-and-aliases/local-functions-and-aliases.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "functions.resolve.only-definitions-in-scope",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_function_defined_after_the_call_is_not_applied",
+   "tests": [
+    "tests/test_scoville.py#test_a_function_defined_after_the_call_is_not_applied",
+    "tests/test_scoville.py#test_the_last_definition_before_the_call_wins",
+    "tests/test_scoville.py#test_a_name_is_resolved_at_the_call_site_not_the_definition"
+   ]
+  },
+  "command-reading.functions-and-aliases.010": {
+   "file": "specs/command-reading/functions-and-aliases/local-functions-and-aliases.feature",
+   "fingerprint": "a211e33a652b",
+   "human": false,
+   "rule": "functions.resolve.recursion-stops",
+   "source": "scoville/scoring.py#_score_local_definition",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_direct_recursion_terminates_and_still_scores_the_body",
+   "tests": [
+    "tests/test_scoville.py#test_direct_recursion_terminates_and_still_scores_the_body",
+    "tests/test_scoville.py#test_mutual_recursion_terminates",
+    "tests/test_scoville.py#test_calling_the_same_helper_twice_scores_both_calls"
+   ]
+  },
+  "command-reading.functions-and-aliases.011": {
+   "file": "specs/command-reading/functions-and-aliases/local-functions-and-aliases.feature",
+   "fingerprint": "176e5cbc3e60",
+   "human": false,
+   "rule": "functions.resolve.input-only",
+   "source": "scoville/scoring.py#analyze",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_nothing_outside_the_analysed_text_is_read",
+   "tests": [
+    "tests/test_scoville.py#test_nothing_outside_the_analysed_text_is_read"
+   ]
+  },
+  "command-reading.input-sources.001": {
+   "file": "specs/command-reading/input-sources/input-sources.feature",
+   "fingerprint": "55f04b22064a",
+   "human": false,
+   "rule": "command-reading.input-sources.arguments-stdin-or-file",
+   "source": "scoville/cli.py#_read_input",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_quiet_uses_ascii_slugs",
+   "tests": [
+    "tests/test_scoville.py#test_quiet_uses_ascii_slugs",
+    "tests/test_scoville.py#test_file_input_reports_line_numbers"
+   ]
+  },
+  "command-reading.input-sources.002": {
+   "file": "specs/command-reading/input-sources/input-sources.feature",
+   "fingerprint": "55f04b22064a",
+   "human": false,
+   "rule": "command-reading.input-sources.undecodable-bytes-replaced",
+   "source": "scoville/cli.py#_read_input",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_file_input_survives_undecodable_bytes",
+   "tests": [
+    "tests/test_scoville.py#test_file_input_survives_undecodable_bytes"
+   ]
+  },
+  "command-reading.wrapped-commands.001": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-command-payloads.feature",
+   "fingerprint": "b32a2c354155",
+   "human": false,
+   "rule": "wrapped-commands.container.payload-scored-in-container",
+   "source": "scoville/carriers.py#carried_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_docker_exec_scored_on_its_payload",
+   "tests": [
+    "tests/test_scoville.py#test_docker_exec_scored_on_its_payload",
+    "tests/test_scoville.py#test_container_payload_scores_below_the_same_command_on_the_host"
+   ]
+  },
+  "command-reading.wrapped-commands.002": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-command-payloads.feature",
+   "fingerprint": "3a7eacd46754",
+   "human": false,
+   "rule": "wrapped-commands.container.flag-values-are-not-the-target",
+   "source": "scoville/carriers.py#_skip_flags",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_docker_exec_payload_is_reported_as_a_child",
+   "tests": [
+    "tests/test_scoville.py#test_docker_exec_payload_is_reported_as_a_child"
+   ]
+  },
+  "command-reading.wrapped-commands.003": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-command-payloads.feature",
+   "fingerprint": "b32a2c354155",
+   "human": false,
+   "rule": "wrapped-commands.remote.payload-scored-on-target",
+   "source": "scoville/carriers.py#carried_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_kubectl_exec_and_ssh_carry_payloads",
+   "tests": [
+    "tests/test_scoville.py#test_kubectl_exec_and_ssh_carry_payloads",
+    "tests/test_scoville.py#test_container_payload_scores_below_the_same_command_on_the_host"
+   ]
+  },
+  "command-reading.wrapped-commands.004": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-command-payloads.feature",
+   "fingerprint": "b32a2c354155",
+   "human": false,
+   "rule": "wrapped-commands.shell.dash-c-unwrapped",
+   "source": "scoville/carriers.py#carried_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_sh_c_payload_is_unwrapped",
+   "tests": [
+    "tests/test_scoville.py#test_sh_c_payload_is_unwrapped"
+   ]
+  },
+  "command-reading.wrapped-commands.005": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-command-payloads.feature",
+   "fingerprint": "b32a2c354155",
+   "human": false,
+   "rule": "wrapped-commands.fleet.ansible-ad-hoc-amplified",
+   "source": "scoville/carriers.py#carried_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_ansible_fans_out_across_the_fleet",
+   "tests": [
+    "tests/test_scoville.py#test_ansible_fans_out_across_the_fleet"
+   ]
+  },
+  "command-reading.wrapped-commands.006": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-command-payloads.feature",
+   "fingerprint": "b32a2c354155",
+   "human": false,
+   "rule": "wrapped-commands.per-file.find-actions-fan-out",
+   "source": "scoville/carriers.py#carried_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_find_exec_and_delete",
+   "tests": [
+    "tests/test_scoville.py#test_find_exec_and_delete",
+    "tests/test_scoville.py#test_find_fans_out_over_the_match_set"
+   ]
+  },
+  "command-reading.wrapped-commands.007": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-command-payloads.feature",
+   "fingerprint": "b32a2c354155",
+   "human": false,
+   "rule": "wrapped-commands.container.hidden-entrypoint-flagged",
+   "source": "scoville/carriers.py#carried_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_docker_run_without_a_command_flags_the_hidden_entrypoint",
+   "tests": [
+    "tests/test_scoville.py#test_docker_run_without_a_command_flags_the_hidden_entrypoint",
+    "tests/test_scoville.py#test_introspection_is_opt_in"
+   ]
+  },
+  "command-reading.wrapped-commands.008": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-command-payloads.feature",
+   "fingerprint": "3a7eacd46754",
+   "human": false,
+   "rule": "wrapped-commands.misread-wrapper-misses-payload",
+   "source": "scoville/carriers.py#_skip_flags",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "command-reading.wrapped-commands.009": {
+   "file": "specs/command-reading/wrapped-commands/looking-through-wrappers.feature",
+   "fingerprint": "7905d556d3d2",
+   "human": false,
+   "rule": "command-reading.wrappers.wrapped-command-scored",
+   "source": "scoville/parsing.py#strip_prefix",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "command-reading.wrapped-commands.010": {
+   "file": "specs/command-reading/wrapped-commands/looking-through-wrappers.feature",
+   "fingerprint": "7905d556d3d2",
+   "human": false,
+   "rule": "command-reading.wrappers.privilege-raises-score",
+   "source": "scoville/parsing.py#strip_prefix",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_sudo_raises_and_is_transparent",
+   "tests": [
+    "tests/test_scoville.py#test_sudo_raises_and_is_transparent"
+   ]
+  },
+  "command-reading.wrapped-commands.011": {
+   "file": "specs/command-reading/wrapped-commands/looking-through-wrappers.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "command-reading.wrappers.bare-prefix-not-reported",
+   "source": "scoville/scoring.py#score_command",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "command-reading.wrapped-commands.012": {
+   "file": "specs/command-reading/wrapped-commands/looking-through-wrappers.feature",
+   "fingerprint": "caf08f84b7de",
+   "human": false,
+   "rule": "command-reading.wrappers.su-payload-visible",
+   "source": "scoville/parsing.py#_is_wrapper_operand",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "command-reading.wrapped-commands.013": {
+   "file": "specs/command-reading/wrapped-commands/looking-through-wrappers.feature",
+   "fingerprint": "73d853dde6ba",
+   "human": false,
+   "rule": "command-reading.wrappers.flag-values-match-the-wrapper",
+   "source": "scoville/parsing.py#_skip_wrapper_args",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "command-reading.wrapped-commands.014": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-commands.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "wrapped.carriers.payload-is-scored",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_docker_exec_scored_on_its_payload",
+   "tests": [
+    "tests/test_scoville.py#test_docker_exec_scored_on_its_payload",
+    "tests/test_scoville.py#test_docker_exec_payload_is_reported_as_a_child",
+    "tests/test_scoville.py#test_kubectl_exec_and_ssh_carry_payloads",
+    "tests/test_scoville.py#test_sh_c_payload_is_unwrapped",
+    "tests/test_scoville.py#test_find_exec_and_delete"
+   ]
+  },
+  "command-reading.wrapped-commands.015": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-commands.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "wrapped.carriers.weighted-by-reach",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_container_payload_scores_below_the_same_command_on_the_host",
+   "tests": [
+    "tests/test_scoville.py#test_container_payload_scores_below_the_same_command_on_the_host",
+    "tests/test_scoville.py#test_ansible_fans_out_across_the_fleet"
+   ]
+  },
+  "command-reading.wrapped-commands.016": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-commands.feature",
+   "fingerprint": "fc015410efed",
+   "human": false,
+   "rule": "wrapped.hidden.opaque-until-read",
+   "source": "scoville/scoring.py#hidden_payload",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_wrapper_is_opaque_until_it_is_read",
+   "tests": [
+    "tests/test_scoville.py#test_a_wrapper_is_opaque_until_it_is_read",
+    "tests/test_scoville.py#test_docker_run_without_a_command_flags_the_hidden_entrypoint",
+    "tests/test_scoville.py#test_source_is_a_readable_wrapper_not_an_eval"
+   ]
+  },
+  "command-reading.wrapped-commands.017": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-commands.feature",
+   "fingerprint": "2eb51af2ea8d",
+   "human": false,
+   "rule": "wrapped.introspect.reads-and-names-the-line",
+   "source": "scoville/scoring.py#resolve_payload",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_introspect_reads_the_wrapper_and_names_the_line",
+   "tests": [
+    "tests/test_scoville.py#test_introspect_reads_the_wrapper_and_names_the_line",
+    "tests/test_scoville.py#test_make_target_and_npm_script_are_resolved"
+   ]
+  },
+  "command-reading.wrapped-commands.018": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-commands.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "wrapped.introspect.harmless-wrapper-scores-lower",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_reading_a_harmless_wrapper_lowers_the_score",
+   "tests": [
+    "tests/test_scoville.py#test_reading_a_harmless_wrapper_lowers_the_score"
+   ]
+  },
+  "command-reading.wrapped-commands.019": {
+   "file": "specs/command-reading/wrapped-commands/wrapped-commands.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "wrapped.introspect.unreadable-says-so",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_make_target_and_npm_script_are_resolved",
+   "tests": [
+    "tests/test_scoville.py#test_make_target_and_npm_script_are_resolved"
+   ]
+  },
+  "developer-tooling.container-image.001": {
+   "file": "specs/developer-tooling/container-image/container-image.feature",
+   "fingerprint": "b7b3a7c4999c",
+   "human": false,
+   "rule": "tooling.container-image.runs-cli-with-arguments",
+   "source": "Dockerfile#ENTRYPOINT",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "developer-tooling.container-image.002": {
+   "file": "specs/developer-tooling/container-image/container-image.feature",
+   "fingerprint": "9725a8afcb68",
+   "human": false,
+   "rule": "tooling.container-image.runs-unprivileged",
+   "source": "Dockerfile#USER",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "explanations.rule-explanations.001": {
+   "file": "specs/explanations/rule-explanations/rule-lookup.feature",
+   "fingerprint": "9b40326cc498",
+   "human": false,
+   "rule": "explanations.rule-explanations.why-prints-long-form",
+   "source": "scoville/cli.py#_why",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_why_accepts_an_amplifier_id_in_the_spelling_list_rules_prints",
+   "tests": [
+    "tests/test_scoville.py#test_why_accepts_an_amplifier_id_in_the_spelling_list_rules_prints"
+   ]
+  },
+  "explanations.rule-explanations.002": {
+   "file": "specs/explanations/rule-explanations/rule-lookup.feature",
+   "fingerprint": "9b40326cc498",
+   "human": false,
+   "rule": "explanations.id-suggestions.unknown-id-suggests",
+   "source": "scoville/cli.py#_why",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_an_unknown_id_exits_64_and_suggests_a_near_miss",
+   "tests": [
+    "tests/test_scoville.py#test_an_unknown_id_exits_64_and_suggests_a_near_miss",
+    "tests/test_scoville.py#test_an_id_with_no_near_miss_points_at_list_rules"
+   ]
+  },
+  "explanations.rule-explanations.003": {
+   "file": "specs/explanations/rule-explanations/rule-lookup.feature",
+   "fingerprint": "7a283a75ad80",
+   "human": false,
+   "rule": "explanations.rule-listing.list-every-rule",
+   "source": "scoville/cli.py#_list_rules",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_list_rules",
+   "tests": [
+    "tests/test_scoville.py#test_list_rules"
+   ]
+  },
+  "explanations.rule-explanations.004": {
+   "file": "specs/explanations/rule-explanations/incident-notes.feature",
+   "fingerprint": "18ca4a581609",
+   "human": false,
+   "rule": "explanations.incidents.note-printed-for-rule-or-amplifier",
+   "source": "scoville/incidents.py#INCIDENTS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_every_id_has_a_why_body",
+   "tests": [
+    "tests/test_scoville.py#test_every_id_has_a_why_body"
+   ]
+  },
+  "explanations.rule-explanations.005": {
+   "file": "specs/explanations/rule-explanations/incident-notes.feature",
+   "fingerprint": "ada3915d095a",
+   "human": false,
+   "rule": "explanations.incidents.missing-note-admitted",
+   "source": "scoville/why.py#_why_incident",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_rule_with_no_incident_note_says_so_rather_than_padding",
+   "tests": [
+    "tests/test_scoville.py#test_a_rule_with_no_incident_note_says_so_rather_than_padding"
+   ]
+  },
+  "explanations.rule-explanations.006": {
+   "file": "specs/explanations/rule-explanations/incident-notes.feature",
+   "fingerprint": "5ee11f01f0df",
+   "human": false,
+   "rule": "explanations.incidents.coverage-shown",
+   "source": "scoville/why.py#why_text",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "explanations.rule-explanations.007": {
+   "file": "specs/explanations/rule-explanations/rule-explanations.feature",
+   "fingerprint": "5ee11f01f0df",
+   "human": false,
+   "rule": "explanations.rule-explanations.headline-matches-the-score",
+   "source": "scoville/why.py#why_text",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_the_derived_view_cannot_disagree_with_the_score",
+   "tests": [
+    "tests/test_scoville.py#test_the_derived_view_cannot_disagree_with_the_score",
+    "tests/test_scoville.py#test_every_id_has_a_why_body",
+    "tests/test_scoville.py#test_a_rule_scoring_at_all_explains_its_band_and_its_alternative"
+   ]
+  },
+  "explanations.rule-explanations.008": {
+   "file": "specs/explanations/rule-explanations/rule-explanations.feature",
+   "fingerprint": "6b163699bc98",
+   "human": false,
+   "rule": "explanations.rule-explanations.amplifier-ids-resolve-in-any-spelling",
+   "source": "scoville/why.py#entry_by_id",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_why_accepts_an_amplifier_id_in_the_spelling_list_rules_prints",
+   "tests": [
+    "tests/test_scoville.py#test_why_accepts_an_amplifier_id_in_the_spelling_list_rules_prints"
+   ]
+  },
+  "explanations.rule-explanations.009": {
+   "file": "specs/explanations/rule-explanations/rule-explanations.feature",
+   "fingerprint": "ada3915d095a",
+   "human": false,
+   "rule": "explanations.rule-explanations.missing-incident-note-is-admitted",
+   "source": "scoville/why.py#_why_incident",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_rule_with_no_incident_note_says_so_rather_than_padding",
+   "tests": [
+    "tests/test_scoville.py#test_a_rule_with_no_incident_note_says_so_rather_than_padding"
+   ]
+  },
+  "explanations.rule-explanations.010": {
+   "file": "specs/explanations/rule-explanations/rule-explanations.feature",
+   "fingerprint": "f588cf4b0494",
+   "human": false,
+   "rule": "explanations.rule-explanations.band-shows-reachable-worst-case",
+   "source": "scoville/why.py#_why_band",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "explanations.rule-explanations.011": {
+   "file": "specs/explanations/rule-explanations/rule-explanations.feature",
+   "fingerprint": "3c08c50c799c",
+   "human": false,
+   "rule": "explanations.rule-explanations.safer-alternative-or-admitted-gap",
+   "source": "scoville/why.py#_why_safer",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "explanations.rule-explanations.012": {
+   "file": "specs/explanations/rule-explanations/rule-explanations.feature",
+   "fingerprint": "7d139031016a",
+   "human": false,
+   "rule": "explanations.rule-explanations.specific-rule-beats-verb-classifier",
+   "source": "scoville/why.py#_why_related",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "gating.exit-codes.001": {
+   "file": "specs/gating/exit-codes/exit-status-and-refusals.feature",
+   "fingerprint": "55f04b22064a",
+   "human": false,
+   "rule": "gating.exit-codes.unscorable-input-refused",
+   "source": "scoville/cli.py#_read_input",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "gating.exit-codes.002": {
+   "file": "specs/gating/exit-codes/exit-status-and-refusals.feature",
+   "fingerprint": "da53adb64a61",
+   "human": false,
+   "rule": "gating.exit-codes.bad-arguments-exit-2",
+   "source": "scoville/cli.py#main",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "gating.exit-codes.003": {
+   "file": "specs/gating/exit-codes/exit-status-and-refusals.feature",
+   "fingerprint": "da53adb64a61",
+   "human": false,
+   "rule": "gating.exit-codes.truncated-output-is-quiet",
+   "source": "scoville/cli.py#main",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "gating.exit-codes.004": {
+   "file": "specs/gating/exit-codes/exit-status-and-refusals.feature",
+   "fingerprint": "da53adb64a61",
+   "human": false,
+   "rule": "gating.version-reporting.prints-version",
+   "source": "scoville/cli.py#main",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "gating.fail-thresholds.001": {
+   "file": "specs/gating/fail-thresholds/gating-on-risk.feature",
+   "fingerprint": "da53adb64a61",
+   "human": false,
+   "rule": "gating.fail-thresholds.worst-command-trips-gate",
+   "source": "scoville/cli.py#main",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_json_output_and_exit_codes",
+   "tests": [
+    "tests/test_scoville.py#test_json_output_and_exit_codes",
+    "tests/test_scoville.py#test_file_input_reports_line_numbers",
+    "tests/test_scoville.py#test_fail_on_still_works_with_peppers"
+   ]
+  },
+  "gating.fail-thresholds.002": {
+   "file": "specs/gating/fail-thresholds/gating-on-risk.feature",
+   "fingerprint": "da53adb64a61",
+   "human": false,
+   "rule": "gating.fail-thresholds.no-threshold-never-fails",
+   "source": "scoville/cli.py#main",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_scale_only_changes_the_label",
+   "tests": [
+    "tests/test_scoville.py#test_scale_only_changes_the_label"
+   ]
+  },
+  "gating.fail-thresholds.003": {
+   "file": "specs/gating/fail-thresholds/gating-on-risk.feature",
+   "fingerprint": "da53adb64a61",
+   "human": false,
+   "rule": "gating.fail-thresholds.allowed-commands-do-not-trip-gate",
+   "source": "scoville/cli.py#main",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_allow_keeps_the_real_score_but_does_not_trip_the_gate",
+   "tests": [
+    "tests/test_scoville.py#test_allow_keeps_the_real_score_but_does_not_trip_the_gate",
+    "tests/test_scoville.py#test_an_unallowed_command_still_trips_the_gate",
+    "tests/test_scoville.py#test_strict_does_not_defeat_an_allow"
+   ]
+  },
+  "gating.library-api.001": {
+   "file": "specs/gating/library-api/library-api.feature",
+   "fingerprint": "c6f50b28372c",
+   "human": false,
+   "rule": "gating.library-api.analyze-importable",
+   "source": "scoville/__init__.py#analyze",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_rm_escalates_with_flags_then_target",
+   "tests": [
+    "tests/test_scoville.py#test_rm_escalates_with_flags_then_target"
+   ]
+  },
+  "gating.version-reporting.001": {
+   "file": "specs/gating/version-reporting/version-reporting.feature",
+   "fingerprint": "fd5ab1d4f40e",
+   "human": false,
+   "rule": "gating.version.reports-installed-release",
+   "source": "scoville/version.py#__version__",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "live-context.container-introspection.001": {
+   "file": "specs/live-context/container-introspection/container-entrypoint-introspection.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "live-context.container-introspection.opt-in-only",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_introspection_is_opt_in",
+   "tests": [
+    "tests/test_scoville.py#test_introspection_is_opt_in"
+   ]
+  },
+  "live-context.container-introspection.002": {
+   "file": "specs/live-context/container-introspection/container-entrypoint-introspection.feature",
+   "fingerprint": "49eef04884e4",
+   "human": false,
+   "rule": "live-context.container-introspection.resolved-entrypoint-scored",
+   "source": "scoville/introspection.py#introspect_target",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_introspect_resolves_a_dangerous_entrypoint",
+   "tests": [
+    "tests/test_scoville.py#test_introspect_resolves_a_dangerous_entrypoint"
+   ]
+  },
+  "live-context.container-introspection.003": {
+   "file": "specs/live-context/container-introspection/container-entrypoint-introspection.feature",
+   "fingerprint": "49eef04884e4",
+   "human": false,
+   "rule": "live-context.container-introspection.root-image-flagged",
+   "source": "scoville/introspection.py#introspect_target",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_introspect_resolves_a_dangerous_entrypoint",
+   "tests": [
+    "tests/test_scoville.py#test_introspect_resolves_a_dangerous_entrypoint"
+   ]
+  },
+  "live-context.container-introspection.004": {
+   "file": "specs/live-context/container-introspection/container-entrypoint-introspection.feature",
+   "fingerprint": "49eef04884e4",
+   "human": false,
+   "rule": "live-context.container-introspection.never-pulls-unresolved",
+   "source": "scoville/introspection.py#introspect_target",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_introspect_reports_when_it_cannot_resolve",
+   "tests": [
+    "tests/test_scoville.py#test_introspect_reports_when_it_cannot_resolve"
+   ]
+  },
+  "live-context.container-introspection.005": {
+   "file": "specs/live-context/container-introspection/container-entrypoint-introspection.feature",
+   "fingerprint": "49eef04884e4",
+   "human": false,
+   "rule": "live-context.container-introspection.no-docker-reported",
+   "source": "scoville/introspection.py#introspect_target",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_introspect_without_docker_says_so",
+   "tests": [
+    "tests/test_scoville.py#test_introspect_without_docker_says_so"
+   ]
+  },
+  "live-context.kubernetes-context.001": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-context.feature",
+   "fingerprint": "a3a1d08bca90",
+   "human": false,
+   "rule": "live-context.kubernetes.refused-command-scored-down-not-to-zero",
+   "source": "scoville/scoring.py#kube_rbac_factors",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_command_the_context_cannot_run_is_dampened_and_says_so",
+   "tests": [
+    "tests/test_scoville.py#test_a_command_the_context_cannot_run_is_dampened_and_says_so",
+    "tests/test_scoville.py#test_a_refusal_scores_down_but_never_to_nothing"
+   ]
+  },
+  "live-context.kubernetes-context.002": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-context.feature",
+   "fingerprint": "f5399bbc39da",
+   "human": false,
+   "rule": "live-context.kubernetes.no-answer-never-dampens",
+   "source": "scoville/kube.py#kube_can_i",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_no_answer_never_dampens",
+   "tests": [
+    "tests/test_scoville.py#test_no_answer_never_dampens",
+    "tests/test_scoville.py#test_an_unanswered_check_is_still_recorded_in_the_trace"
+   ]
+  },
+  "live-context.kubernetes-context.003": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-context.feature",
+   "fingerprint": "a3a1d08bca90",
+   "human": false,
+   "rule": "live-context.kubernetes.cluster-admin-amplifies",
+   "source": "scoville/scoring.py#kube_rbac_factors",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_cluster_admin_is_an_amplifier_on_a_destructive_verb",
+   "tests": [
+    "tests/test_scoville.py#test_cluster_admin_is_an_amplifier_on_a_destructive_verb"
+   ]
+  },
+  "live-context.kubernetes-context.004": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-context.feature",
+   "fingerprint": "a3a1d08bca90",
+   "human": false,
+   "rule": "live-context.kubernetes.permitted-leaves-score-unchanged",
+   "source": "scoville/scoring.py#kube_rbac_factors",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_permitted_but_not_admin_changes_nothing_and_says_why",
+   "tests": [
+    "tests/test_scoville.py#test_permitted_but_not_admin_changes_nothing_and_says_why"
+   ]
+  },
+  "live-context.kubernetes-context.005": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-context.feature",
+   "fingerprint": "bb74c2947008",
+   "human": false,
+   "rule": "live-context.kubernetes.asks-about-the-rbac-verb-and-resource",
+   "source": "scoville/kube.py#kube_target",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_kubectl_verbs_are_mapped_to_the_rbac_verbs_they_need",
+   "tests": [
+    "tests/test_scoville.py#test_kubectl_verbs_are_mapped_to_the_rbac_verbs_they_need",
+    "tests/test_scoville.py#test_a_short_resource_name_is_expanded_before_it_is_asked_about",
+    "tests/test_scoville.py#test_an_unknown_resource_is_passed_through_verbatim",
+    "tests/test_scoville.py#test_the_verb_and_resource_come_from_the_positionals",
+    "tests/test_scoville.py#test_a_flag_value_is_not_mistaken_for_the_resource"
+   ]
+  },
+  "live-context.kubernetes-context.006": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-context.feature",
+   "fingerprint": "bb74c2947008",
+   "human": false,
+   "rule": "live-context.kubernetes.name-taken-as-resource",
+   "source": "scoville/kube.py#kube_target",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_the_verb_and_resource_come_from_the_positionals",
+   "tests": [
+    "tests/test_scoville.py#test_the_verb_and_resource_come_from_the_positionals"
+   ]
+  },
+  "live-context.kubernetes-context.007": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-context.feature",
+   "fingerprint": "b6e91ec290f2",
+   "human": false,
+   "rule": "live-context.kubernetes.check-timeout-bounded",
+   "source": "scoville/kube.py#_kubectl",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_the_timeout_is_bounded_and_configurable",
+   "tests": [
+    "tests/test_scoville.py#test_the_timeout_is_bounded_and_configurable"
+   ]
+  },
+  "live-context.kubernetes-context.008": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-check.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "kube.rbac.only-under-introspect",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_the_default_path_never_talks_to_a_cluster",
+   "tests": [
+    "tests/test_scoville.py#test_the_default_path_never_talks_to_a_cluster",
+    "tests/test_scoville.py#test_only_kubectl_lines_are_checked"
+   ]
+  },
+  "live-context.kubernetes-context.009": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-check.feature",
+   "fingerprint": "a3a1d08bca90",
+   "human": false,
+   "rule": "kube.rbac.refusal-discounts-not-erases",
+   "source": "scoville/scoring.py#kube_rbac_factors",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_command_the_context_cannot_run_is_dampened_and_says_so",
+   "tests": [
+    "tests/test_scoville.py#test_a_command_the_context_cannot_run_is_dampened_and_says_so",
+    "tests/test_scoville.py#test_a_refusal_scores_down_but_never_to_nothing"
+   ]
+  },
+  "live-context.kubernetes-context.010": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-check.feature",
+   "fingerprint": "a3a1d08bca90",
+   "human": false,
+   "rule": "kube.rbac.cluster-admin-amplifies",
+   "source": "scoville/scoring.py#kube_rbac_factors",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_cluster_admin_is_an_amplifier_on_a_destructive_verb",
+   "tests": [
+    "tests/test_scoville.py#test_cluster_admin_is_an_amplifier_on_a_destructive_verb"
+   ]
+  },
+  "live-context.kubernetes-context.011": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-check.feature",
+   "fingerprint": "a3a1d08bca90",
+   "human": false,
+   "rule": "kube.rbac.permitted-unchanged",
+   "source": "scoville/scoring.py#kube_rbac_factors",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_permitted_but_not_admin_changes_nothing_and_says_why",
+   "tests": [
+    "tests/test_scoville.py#test_permitted_but_not_admin_changes_nothing_and_says_why"
+   ]
+  },
+  "live-context.kubernetes-context.012": {
+   "file": "specs/live-context/kubernetes-context/kubernetes-rbac-check.feature",
+   "fingerprint": "a3a1d08bca90",
+   "human": false,
+   "rule": "kube.rbac.no-answer-never-lowers",
+   "source": "scoville/scoring.py#kube_rbac_factors",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_no_answer_never_dampens",
+   "tests": [
+    "tests/test_scoville.py#test_no_answer_never_dampens",
+    "tests/test_scoville.py#test_an_unanswered_check_is_still_recorded_in_the_trace"
+   ]
+  },
+  "repo-policy.config-discovery.001": {
+   "file": "specs/repo-policy/config-discovery/policy-selection.feature",
+   "fingerprint": "da53adb64a61",
+   "human": false,
+   "rule": "repo-policy.config-discovery.nearest-rc-from-analysed-location",
+   "source": "scoville/cli.py#main",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_no_config_ignores_a_discovered_file",
+   "tests": [
+    "tests/test_scoville.py#test_no_config_ignores_a_discovered_file"
+   ]
+  },
+  "repo-policy.config-discovery.002": {
+   "file": "specs/repo-policy/config-discovery/policy-selection.feature",
+   "fingerprint": "203b6d909031",
+   "human": false,
+   "rule": "repo-policy.config-discovery.no-config-ignores-discovered",
+   "source": "scoville/cli.py#_load_entries",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_no_config_ignores_a_discovered_file",
+   "tests": [
+    "tests/test_scoville.py#test_no_config_ignores_a_discovered_file"
+   ]
+  },
+  "repo-policy.config-discovery.003": {
+   "file": "specs/repo-policy/config-discovery/policy-selection.feature",
+   "fingerprint": "203b6d909031",
+   "human": false,
+   "rule": "repo-policy.config-discovery.named-config-must-exist",
+   "source": "scoville/cli.py#_load_entries",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_named_config_that_is_missing_is_an_error",
+   "tests": [
+    "tests/test_scoville.py#test_a_named_config_that_is_missing_is_an_error"
+   ]
+  },
+  "repo-policy.config-discovery.004": {
+   "file": "specs/repo-policy/config-discovery/config-discovery.feature",
+   "fingerprint": "a147e977aa53",
+   "human": false,
+   "rule": "policy.config.nearest-above-applies",
+   "source": "scoville/overrides.py#find_config",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_config_is_discovered_from_the_directory_upwards",
+   "tests": [
+    "tests/test_scoville.py#test_config_is_discovered_from_the_directory_upwards"
+   ]
+  },
+  "repo-policy.config-discovery.005": {
+   "file": "specs/repo-policy/config-discovery/config-discovery.feature",
+   "fingerprint": "203b6d909031",
+   "human": false,
+   "rule": "policy.config.no-config-ignores-discovered",
+   "source": "scoville/cli.py#_load_entries",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_no_config_ignores_a_discovered_file",
+   "tests": [
+    "tests/test_scoville.py#test_no_config_ignores_a_discovered_file"
+   ]
+  },
+  "repo-policy.config-discovery.006": {
+   "file": "specs/repo-policy/config-discovery/config-discovery.feature",
+   "fingerprint": "203b6d909031",
+   "human": false,
+   "rule": "policy.config.named-config-must-exist",
+   "source": "scoville/cli.py#_load_entries",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_named_config_that_is_missing_is_an_error",
+   "tests": [
+    "tests/test_scoville.py#test_a_named_config_that_is_missing_is_an_error"
+   ]
+  },
+  "repo-policy.rule-overrides.001": {
+   "file": "specs/repo-policy/rule-overrides/repo-rule-overrides.feature",
+   "fingerprint": "c4e321cb2e58",
+   "human": false,
+   "rule": "policy.overrides.allow-keeps-score-but-opens-gate",
+   "source": "scoville/overrides.py#apply_overrides",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_allow_keeps_the_real_score_but_does_not_trip_the_gate",
+   "tests": [
+    "tests/test_scoville.py#test_allow_keeps_the_real_score_but_does_not_trip_the_gate",
+    "tests/test_scoville.py#test_an_unallowed_command_still_trips_the_gate"
+   ]
+  },
+  "repo-policy.rule-overrides.002": {
+   "file": "specs/repo-policy/rule-overrides/repo-rule-overrides.feature",
+   "fingerprint": "c4e321cb2e58",
+   "human": false,
+   "rule": "policy.overrides.deny-forces-critical",
+   "source": "scoville/overrides.py#apply_overrides",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_deny_forces_critical_whatever_the_command_scores",
+   "tests": [
+    "tests/test_scoville.py#test_deny_forces_critical_whatever_the_command_scores"
+   ]
+  },
+  "repo-policy.rule-overrides.003": {
+   "file": "specs/repo-policy/rule-overrides/repo-rule-overrides.feature",
+   "fingerprint": "c4e321cb2e58",
+   "human": false,
+   "rule": "policy.overrides.rescore-pins-band",
+   "source": "scoville/overrides.py#apply_overrides",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_rescore_pins_the_band_and_says_what_moved",
+   "tests": [
+    "tests/test_scoville.py#test_rescore_pins_the_band_and_says_what_moved"
+   ]
+  },
+  "repo-policy.rule-overrides.004": {
+   "file": "specs/repo-policy/rule-overrides/repo-rule-overrides.feature",
+   "fingerprint": "dfdf87ca6ede",
+   "human": false,
+   "rule": "policy.overrides.deny-beats-allow",
+   "source": "scoville/overrides.py#load_config",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_deny_beats_allow_when_both_match",
+   "tests": [
+    "tests/test_scoville.py#test_deny_beats_allow_when_both_match"
+   ]
+  },
+  "repo-policy.rule-overrides.005": {
+   "file": "specs/repo-policy/rule-overrides/repo-rule-overrides.feature",
+   "fingerprint": "f0266ebc8fa0",
+   "human": false,
+   "rule": "policy.overrides.allow-survives-strict",
+   "source": "scoville/overrides.py#gated",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_strict_does_not_defeat_an_allow",
+   "tests": [
+    "tests/test_scoville.py#test_strict_does_not_defeat_an_allow"
+   ]
+  },
+  "repo-policy.rule-overrides.006": {
+   "file": "specs/repo-policy/rule-overrides/repo-rule-overrides.feature",
+   "fingerprint": "6ccf7c391d21",
+   "human": false,
+   "rule": "policy.overrides.reason-required",
+   "source": "scoville/overrides.py#_parse_entry",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_every_override_must_state_a_reason",
+   "tests": [
+    "tests/test_scoville.py#test_every_override_must_state_a_reason"
+   ]
+  },
+  "repo-policy.rule-overrides.007": {
+   "file": "specs/repo-policy/rule-overrides/repo-rule-overrides.feature",
+   "fingerprint": "dfdf87ca6ede",
+   "human": false,
+   "rule": "policy.overrides.malformed-config-refused",
+   "source": "scoville/overrides.py#load_config",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_malformed_config_is_refused_not_guessed_at",
+   "tests": [
+    "tests/test_scoville.py#test_a_malformed_config_is_refused_not_guessed_at"
+   ]
+  },
+  "repo-policy.rule-overrides.008": {
+   "file": "specs/repo-policy/rule-overrides/repo-rule-overrides.feature",
+   "fingerprint": "c4e321cb2e58",
+   "human": false,
+   "rule": "policy.overrides.visible-in-json",
+   "source": "scoville/overrides.py#apply_overrides",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_an_override_is_visible_in_json",
+   "tests": [
+    "tests/test_scoville.py#test_an_override_is_visible_in_json"
+   ]
+  },
+  "reporting.json-output.001": {
+   "file": "specs/reporting/json-output/json-output.feature",
+   "fingerprint": "61fefca7fa61",
+   "human": false,
+   "rule": "reporting.json.overall-and-commands",
+   "source": "scoville/output.py#public",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_json_output_and_exit_codes",
+   "tests": [
+    "tests/test_scoville.py#test_json_output_and_exit_codes",
+    "tests/test_scoville.py#test_json_carries_the_rule_id_on_every_factor_that_has_one"
+   ]
+  },
+  "reporting.pepper-scale.001": {
+   "file": "specs/reporting/pepper-scale/pepper-scale.feature",
+   "fingerprint": "c6221765185d",
+   "human": false,
+   "rule": "reporting.peppers.level-names",
+   "source": "scoville/output.py#label",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_scale_only_changes_the_label",
+   "tests": [
+    "tests/test_scoville.py#test_scale_only_changes_the_label",
+    "tests/test_scoville.py#test_quiet_uses_ascii_slugs",
+    "tests/test_scoville.py#test_pepper_labels_cover_every_band",
+    "tests/test_scoville.py#test_pepper_heat_rises_with_the_band"
+   ]
+  },
+  "reporting.pepper-scale.002": {
+   "file": "specs/reporting/pepper-scale/pepper-scale.feature",
+   "fingerprint": "c6221765185d",
+   "human": false,
+   "rule": "reporting.peppers.only-the-label-changes",
+   "source": "scoville/output.py#label",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_scale_only_changes_the_label",
+   "tests": [
+    "tests/test_scoville.py#test_scale_only_changes_the_label",
+    "tests/test_scoville.py#test_json_is_unaffected_by_the_scale"
+   ]
+  },
+  "reporting.text-report.001": {
+   "file": "specs/reporting/text-report/run-report.feature",
+   "fingerprint": "952753b3a70c",
+   "human": false,
+   "rule": "reporting.text-report.summary-line",
+   "source": "scoville/cli.py#_report",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_scale_only_changes_the_label",
+   "tests": [
+    "tests/test_scoville.py#test_scale_only_changes_the_label"
+   ]
+  },
+  "reporting.text-report.002": {
+   "file": "specs/reporting/text-report/run-report.feature",
+   "fingerprint": "952753b3a70c",
+   "human": false,
+   "rule": "reporting.text-report.quiet-one-line-per-command",
+   "source": "scoville/cli.py#_report",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_quiet_uses_ascii_slugs",
+   "tests": [
+    "tests/test_scoville.py#test_quiet_uses_ascii_slugs"
+   ]
+  },
+  "reporting.text-report.003": {
+   "file": "specs/reporting/text-report/run-report.feature",
+   "fingerprint": "952753b3a70c",
+   "human": false,
+   "rule": "reporting.colour.only-on-interactive-terminals",
+   "source": "scoville/cli.py#_report",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "reporting.text-report.004": {
+   "file": "specs/reporting/text-report/run-report.feature",
+   "fingerprint": "952753b3a70c",
+   "human": false,
+   "rule": "reporting.json-output.overall-and-commands",
+   "source": "scoville/cli.py#_report",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_json_is_unaffected_by_the_scale",
+   "tests": [
+    "tests/test_scoville.py#test_json_is_unaffected_by_the_scale",
+    "tests/test_scoville.py#test_json_output_and_exit_codes",
+    "tests/test_scoville.py#test_an_override_is_visible_in_json"
+   ]
+  },
+  "reporting.text-report.005": {
+   "file": "specs/reporting/text-report/text-report.feature",
+   "fingerprint": "199d7ca87550",
+   "human": false,
+   "rule": "reporting.text.run-verdict-is-the-worst-command",
+   "source": "scoville/output.py#overall",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_sequences_split_and_worst_wins",
+   "tests": [
+    "tests/test_scoville.py#test_sequences_split_and_worst_wins"
+   ]
+  },
+  "reporting.text-report.006": {
+   "file": "specs/reporting/text-report/text-report.feature",
+   "fingerprint": "b9f3e690d97d",
+   "human": false,
+   "rule": "reporting.text.zero-weight-factors-hidden",
+   "source": "scoville/output.py#render_text",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "reporting.text-report.007": {
+   "file": "specs/reporting/text-report/text-report.feature",
+   "fingerprint": "b9f3e690d97d",
+   "human": false,
+   "rule": "reporting.text.points-to-rule-explanation",
+   "source": "scoville/output.py#render_text",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_finding_names_the_rule_so_why_is_discoverable",
+   "tests": [
+    "tests/test_scoville.py#test_a_finding_names_the_rule_so_why_is_discoverable",
+    "tests/test_scoville.py#test_a_safe_command_keeps_the_pointer_out_of_the_way"
+   ]
+  },
+  "reporting.text-report.008": {
+   "file": "specs/reporting/text-report/text-report.feature",
+   "fingerprint": "b9f3e690d97d",
+   "human": false,
+   "rule": "reporting.text.safer-alternative-for-risky",
+   "source": "scoville/output.py#render_text",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "reporting.text-report.009": {
+   "file": "specs/reporting/text-report/text-report.feature",
+   "fingerprint": "b9f3e690d97d",
+   "human": false,
+   "rule": "reporting.text.script-findings-carry-line-numbers",
+   "source": "scoville/output.py#render_text",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.catalogue-integrity.001": {
+   "file": "specs/risk-catalogue/catalogue-integrity/catalogue-integrity.feature",
+   "fingerprint": "a8e9cb1488eb",
+   "human": false,
+   "rule": "catalogue.entries.scope-must-be-defined",
+   "source": "scoville/catalog.py#_check",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_tables_reject_a_bad_scope",
+   "tests": [
+    "tests/test_scoville.py#test_tables_reject_a_bad_scope"
+   ]
+  },
+  "risk-catalogue.catalogue-integrity.002": {
+   "file": "specs/risk-catalogue/catalogue-integrity/catalogue-integrity.feature",
+   "fingerprint": "a8e9cb1488eb",
+   "human": false,
+   "rule": "catalogue.entries.reversibility-must-be-defined",
+   "source": "scoville/catalog.py#_check",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.catalogue-integrity.003": {
+   "file": "specs/risk-catalogue/catalogue-integrity/catalogue-integrity.feature",
+   "fingerprint": "23c5248ef9e6",
+   "human": false,
+   "rule": "catalogue.rules.scope-and-reversibility-required",
+   "source": "scoville/catalog.py#R",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.catalogue-integrity.004": {
+   "file": "specs/risk-catalogue/catalogue-integrity/catalogue-integrity.feature",
+   "fingerprint": "4cf68f453f61",
+   "human": false,
+   "rule": "catalogue.amplifiers.scope-and-reversibility-optional",
+   "source": "scoville/catalog.py#A",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.catalogue-integrity.005": {
+   "file": "specs/risk-catalogue/catalogue-integrity/catalogue-integrity.feature",
+   "fingerprint": "4cf68f453f61",
+   "human": false,
+   "rule": "catalogue.entries.pattern-must-compile",
+   "source": "scoville/catalog.py#A",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.data-and-services.001": {
+   "file": "specs/risk-catalogue/data-and-services/secrets-backups-storage.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.vault.rated-per-operation",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.002": {
+   "file": "specs/risk-catalogue/data-and-services/secrets-backups-storage.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.vault.soft-delete-is-recoverable",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_vault_kv_delete_is_soft_and_kv_destroy_is_not",
+   "tests": [
+    "tests/test_scoville.py#test_vault_kv_delete_is_soft_and_kv_destroy_is_not"
+   ]
+  },
+  "risk-catalogue.data-and-services.003": {
+   "file": "specs/risk-catalogue/data-and-services/secrets-backups-storage.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.secrets.printing-a-secret-is-not-safe",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.004": {
+   "file": "specs/risk-catalogue/data-and-services/secrets-backups-storage.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.backups.losing-a-restore-point-is-high",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_backup_tools_are_scored_on_the_copy_of_last_resort",
+   "tests": [
+    "tests/test_scoville.py#test_backup_tools_are_scored_on_the_copy_of_last_resort",
+    "tests/test_scoville.py#test_velero_restore_delete_removes_the_record_not_the_restore",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.005": {
+   "file": "specs/risk-catalogue/data-and-services/secrets-backups-storage.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.storage.data-removing-verbs",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_rclone_sync_deletes_at_the_destination",
+   "tests": [
+    "tests/test_scoville.py#test_rclone_sync_deletes_at_the_destination",
+    "tests/test_scoville.py#test_etcd_prefix_delete_is_cluster_state",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.006": {
+   "file": "specs/risk-catalogue/data-and-services/secrets-backups-storage.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.backups.keyword-anywhere-triggers-forget",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.data-and-services.007": {
+   "file": "specs/risk-catalogue/data-and-services/database-and-data-service-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.databases.destructive-statements-are-high-or-critical",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+    "tests/test_scoville.py#test_sql_without_where_clause"
+   ]
+  },
+  "risk-catalogue.data-and-services.008": {
+   "file": "specs/risk-catalogue/data-and-services/database-and-data-service-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.databases.unbounded-delete-outranks-filtered",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_sql_without_where_clause",
+   "tests": [
+    "tests/test_scoville.py#test_sql_without_where_clause"
+   ]
+  },
+  "risk-catalogue.data-and-services.009": {
+   "file": "specs/risk-catalogue/data-and-services/database-and-data-service-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.databases.client-session-is-low",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_sql_without_where_clause",
+   "tests": [
+    "tests/test_scoville.py#test_sql_without_where_clause",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.010": {
+   "file": "specs/risk-catalogue/data-and-services/database-and-data-service-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.services.wiping-brokers-and-schemas-is-high-or-critical",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.011": {
+   "file": "specs/risk-catalogue/data-and-services/database-and-data-service-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.migrations.any-python-flush-is-scored-as-database-flush",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.data-and-services.012": {
+   "file": "specs/risk-catalogue/data-and-services/storage-boot-access-cluster-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.storage.device-erasure-is-critical-or-high",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.013": {
+   "file": "specs/risk-catalogue/data-and-services/storage-boot-access-cluster-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.storage.fsck-auto-repair-is-medium-check-only-is-safe",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.014": {
+   "file": "specs/risk-catalogue/data-and-services/storage-boot-access-cluster-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.boot.boot-path-changes-are-flagged",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.015": {
+   "file": "specs/risk-catalogue/data-and-services/storage-boot-access-cluster-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.boot.module-load-scored-as-unload",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.data-and-services.016": {
+   "file": "specs/risk-catalogue/data-and-services/storage-boot-access-cluster-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.exposure.widening-access-is-flagged",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.017": {
+   "file": "specs/risk-catalogue/data-and-services/storage-boot-access-cluster-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.audit.erasing-evidence-is-flagged",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.data-and-services.018": {
+   "file": "specs/risk-catalogue/data-and-services/storage-boot-access-cluster-commands.feature",
+   "fingerprint": "b0c0ce66475e",
+   "human": false,
+   "rule": "data.clusters.keys-certs-and-membership-changes-are-flagged",
+   "source": "scoville/rules_services.py#SERVICE_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.host-and-files.001": {
+   "file": "specs/risk-catalogue/host-and-files/remote-code-execution.feature",
+   "fingerprint": "19fb97098e71",
+   "human": false,
+   "rule": "catalogue.remote-code.piped-into-interpreter-is-critical",
+   "source": "scoville/rules.py#FETCHERS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_curl_pipe_shell",
+   "tests": [
+    "tests/test_scoville.py#test_curl_pipe_shell",
+    "tests/test_scoville.py#test_remote_code_is_critical_however_it_is_spelled",
+    "tests/test_scoville.py#test_decoding_into_a_shell_is_the_same_as_downloading_into_one"
+   ]
+  },
+  "risk-catalogue.host-and-files.002": {
+   "file": "specs/risk-catalogue/host-and-files/remote-code-execution.feature",
+   "fingerprint": "c9314703acdc",
+   "human": false,
+   "rule": "catalogue.remote-code.download-then-execute-is-high",
+   "source": "scoville/scoring.py#_flag_deferred_exec",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_download_then_execute_is_the_same_risk_as_the_pipe",
+   "tests": [
+    "tests/test_scoville.py#test_download_then_execute_is_the_same_risk_as_the_pipe",
+    "tests/test_scoville.py#test_downloaded_script_is_not_double_counted"
+   ]
+  },
+  "risk-catalogue.host-and-files.003": {
+   "file": "specs/risk-catalogue/host-and-files/remote-code-execution.feature",
+   "fingerprint": "c9314703acdc",
+   "human": false,
+   "rule": "catalogue.remote-code.local-script-is-not-remote-code",
+   "source": "scoville/scoring.py#_flag_deferred_exec",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_local_script_is_opaque_but_not_remote_code",
+   "tests": [
+    "tests/test_scoville.py#test_a_local_script_is_opaque_but_not_remote_code"
+   ]
+  },
+  "risk-catalogue.host-and-files.004": {
+   "file": "specs/risk-catalogue/host-and-files/host-command-ratings.feature",
+   "fingerprint": "2891f89bba4d",
+   "human": false,
+   "rule": "host.reads.inspection-is-safe",
+   "source": "scoville/rules_host.py#HOST_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+    "tests/test_scoville.py#test_ifup_is_fine_ifdown_is_not"
+   ]
+  },
+  "risk-catalogue.host-and-files.005": {
+   "file": "specs/risk-catalogue/host-and-files/host-command-ratings.feature",
+   "fingerprint": "2891f89bba4d",
+   "human": false,
+   "rule": "host.system.subcommand-decides-rating",
+   "source": "scoville/rules_host.py#HOST_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+    "tests/test_scoville.py#test_crontab_r"
+   ]
+  },
+  "risk-catalogue.host-and-files.006": {
+   "file": "specs/risk-catalogue/host-and-files/host-command-ratings.feature",
+   "fingerprint": "2891f89bba4d",
+   "human": false,
+   "rule": "host.devices.format-is-critical",
+   "source": "scoville/rules_host.py#HOST_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.host-and-files.007": {
+   "file": "specs/risk-catalogue/host-and-files/host-command-ratings.feature",
+   "fingerprint": "2891f89bba4d",
+   "human": false,
+   "rule": "host.network.lockout-risk-flagged",
+   "source": "scoville/rules_host.py#HOST_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+    "tests/test_scoville.py#test_ifup_is_fine_ifdown_is_not"
+   ]
+  },
+  "risk-catalogue.host-and-files.008": {
+   "file": "specs/risk-catalogue/host-and-files/host-command-ratings.feature",
+   "fingerprint": "2891f89bba4d",
+   "human": false,
+   "rule": "host.exec.eval-is-high",
+   "source": "scoville/rules_host.py#HOST_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_eval_is_high_because_nothing_can_read_it",
+   "tests": [
+    "tests/test_scoville.py#test_eval_is_high_because_nothing_can_read_it",
+    "tests/test_scoville.py#test_source_is_a_readable_wrapper_not_an_eval",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.host-and-files.009": {
+   "file": "specs/risk-catalogue/host-and-files/host-command-ratings.feature",
+   "fingerprint": "2891f89bba4d",
+   "human": false,
+   "rule": "host.packages.install-and-remove-are-not-reads",
+   "source": "scoville/rules_host.py#HOST_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.host-and-files.010": {
+   "file": "specs/risk-catalogue/host-and-files/host-command-ratings.feature",
+   "fingerprint": "2891f89bba4d",
+   "human": false,
+   "rule": "host.packages.metadata-refresh-rated-as-install",
+   "source": "scoville/rules_host.py#HOST_RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.resource-clis.001": {
+   "file": "specs/risk-catalogue/resource-clis/rule-precedence.feature",
+   "fingerprint": "4a73882e7413",
+   "human": false,
+   "rule": "catalogue.precedence.specific-rule-beats-generic-verb",
+   "source": "scoville/rules.py#RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_specific_rules_beat_generic_verbs_even_when_lower",
+   "tests": [
+    "tests/test_scoville.py#test_specific_rules_beat_generic_verbs_even_when_lower"
+   ]
+  },
+  "risk-catalogue.resource-clis.002": {
+   "file": "specs/risk-catalogue/resource-clis/resource-cli-verbs.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.resource-clis.verb-sets-the-floor",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_verb_classification_still_carries_the_clis_nobody_promoted",
+   "tests": [
+    "tests/test_scoville.py#test_verb_classification_still_carries_the_clis_nobody_promoted",
+    "tests/test_scoville.py#test_read_verbs_stay_free",
+    "tests/test_scoville.py#test_write_verbs_sit_between",
+    "tests/test_scoville.py#test_destructive_verbs_across_cloud_clis",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.resource-clis.003": {
+   "file": "specs/risk-catalogue/resource-clis/resource-cli-verbs.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.resource-clis.first-verb-wins",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_resource_named_delete_does_not_make_a_read_destructive",
+   "tests": [
+    "tests/test_scoville.py#test_a_resource_named_delete_does_not_make_a_read_destructive"
+   ]
+  },
+  "risk-catalogue.resource-clis.004": {
+   "file": "specs/risk-catalogue/resource-clis/resource-cli-verbs.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.resource-clis.specific-rule-beats-verb",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_specific_rules_beat_generic_verbs_even_when_lower",
+   "tests": [
+    "tests/test_scoville.py#test_specific_rules_beat_generic_verbs_even_when_lower",
+    "tests/test_scoville.py#test_doctl_verbs_that_lie",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.resource-clis.005": {
+   "file": "specs/risk-catalogue/resource-clis/resource-cli-verbs.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.resource-clis.unlisted-subcommand-falls-back",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_an_unenumerated_subcommand_of_a_promoted_cli_falls_back_to_the_verb",
+   "tests": [
+    "tests/test_scoville.py#test_an_unenumerated_subcommand_of_a_promoted_cli_falls_back_to_the_verb",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.resource-clis.006": {
+   "file": "specs/risk-catalogue/resource-clis/resource-cli-verbs-verbs.feature",
+   "fingerprint": "1c3c6ca11276",
+   "human": false,
+   "rule": "catalogue.resource-clis.destroy-verb-is-high-risk",
+   "source": "scoville/verbs.py#DESTROY_VERBS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_destructive_verbs_across_cloud_clis",
+   "tests": [
+    "tests/test_scoville.py#test_destructive_verbs_across_cloud_clis"
+   ]
+  },
+  "risk-catalogue.resource-clis.007": {
+   "file": "specs/risk-catalogue/resource-clis/resource-cli-verbs-verbs.feature",
+   "fingerprint": "4508765ba6c3",
+   "human": false,
+   "rule": "catalogue.resource-clis.read-verb-is-safe",
+   "source": "scoville/verbs.py#READ_VERBS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_read_verbs_stay_free",
+   "tests": [
+    "tests/test_scoville.py#test_read_verbs_stay_free"
+   ]
+  },
+  "risk-catalogue.resource-clis.008": {
+   "file": "specs/risk-catalogue/resource-clis/resource-cli-verbs-verbs.feature",
+   "fingerprint": "286b4074fdc0",
+   "human": false,
+   "rule": "catalogue.resource-clis.write-verb-is-low-risk",
+   "source": "scoville/verbs.py#WRITE_VERBS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_write_verbs_sit_between",
+   "tests": [
+    "tests/test_scoville.py#test_write_verbs_sit_between"
+   ]
+  },
+  "risk-catalogue.resource-clis.009": {
+   "file": "specs/risk-catalogue/resource-clis/resource-cli-verbs-verbs.feature",
+   "fingerprint": "1c3c6ca11276",
+   "human": false,
+   "rule": "catalogue.resource-clis.first-verb-decides",
+   "source": "scoville/verbs.py#DESTROY_VERBS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_resource_named_delete_does_not_make_a_read_destructive",
+   "tests": [
+    "tests/test_scoville.py#test_a_resource_named_delete_does_not_make_a_read_destructive"
+   ]
+  },
+  "risk-catalogue.resource-clis.010": {
+   "file": "specs/risk-catalogue/resource-clis/resource-cli-verbs-verbs.feature",
+   "fingerprint": "6d903f65ee4f",
+   "human": false,
+   "rule": "catalogue.resource-clis.verb-must-lead",
+   "source": "scoville/verbs.py#_LEAD",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.resource-clis.012": {
+   "file": "specs/risk-catalogue/resource-clis/resource-cli-verbs-verbs.feature",
+   "fingerprint": "65e3eabf8e13",
+   "human": false,
+   "rule": "catalogue.resource-clis.doctl-aliases-match",
+   "source": "scoville/verbs.py#DO_DELETE",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_doctl_aliases_reach_the_same_rules",
+   "tests": [
+    "tests/test_scoville.py#test_doctl_aliases_reach_the_same_rules",
+    "tests/test_scoville.py#test_each_doctl_rule_matches_its_own_command"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.001": {
+   "file": "specs/risk-catalogue/source-control-and-containers/cloud-delivery-cli-resources.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.promoted-clis.resource-decides-score",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_the_resource_moves_the_score_within_one_cli",
+   "tests": [
+    "tests/test_scoville.py#test_the_resource_moves_the_score_within_one_cli",
+    "tests/test_scoville.py#test_doctl_scores_the_resource_not_the_verb",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.002": {
+   "file": "specs/risk-catalogue/source-control-and-containers/cloud-delivery-cli-resources.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.promoted-clis.misleading-verbs-explained",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_openstack_project_delete_leaves_the_resources_running",
+   "tests": [
+    "tests/test_scoville.py#test_openstack_project_delete_leaves_the_resources_running",
+    "tests/test_scoville.py#test_doctl_verbs_that_lie",
+    "tests/test_scoville.py#test_argocd_cluster_rm_does_not_touch_the_cluster",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.003": {
+   "file": "specs/risk-catalogue/source-control-and-containers/cloud-delivery-cli-resources.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.doctl.aliases-match-long-forms",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_doctl_aliases_reach_the_same_rules",
+   "tests": [
+    "tests/test_scoville.py#test_doctl_aliases_reach_the_same_rules",
+    "tests/test_scoville.py#test_each_doctl_rule_matches_its_own_command",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.004": {
+   "file": "specs/risk-catalogue/source-control-and-containers/cloud-delivery-cli-resources.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.gh.api-rated-by-method",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_gh_api_is_scored_on_the_method_not_the_subcommand",
+   "tests": [
+    "tests/test_scoville.py#test_gh_api_is_scored_on_the_method_not_the_subcommand",
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.005": {
+   "file": "specs/risk-catalogue/source-control-and-containers/cloud-delivery-cli-resources.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.promoted-clis.firewall-opening-rated-low",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.006": {
+   "file": "specs/risk-catalogue/source-control-and-containers/cloud-delivery-cli-resources.feature",
+   "fingerprint": "49a184b91171",
+   "human": false,
+   "rule": "catalogue.config-management.fleet-runs-are-medium",
+   "source": "scoville/rules_clis.py#CLI_RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.source-control-and-containers.007": {
+   "file": "specs/risk-catalogue/source-control-and-containers/platform-risk-ratings.feature",
+   "fingerprint": "82c0e02b9d3f",
+   "human": false,
+   "rule": "platform.read-only.queries-are-safe",
+   "source": "scoville/rules_platform.py#PLATFORM_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+    "tests/test_scoville.py#test_aws_read_is_free_write_is_not",
+    "tests/test_scoville.py#test_terraform_plan_is_free_destroy_is_not"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.008": {
+   "file": "specs/risk-catalogue/source-control-and-containers/platform-risk-ratings.feature",
+   "fingerprint": "82c0e02b9d3f",
+   "human": false,
+   "rule": "platform.git.history-loss-is-rated-by-recoverability",
+   "source": "scoville/rules_platform.py#PLATFORM_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+    "tests/test_scoville.py#test_git_force_push_and_clean"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.009": {
+   "file": "specs/risk-catalogue/source-control-and-containers/platform-risk-ratings.feature",
+   "fingerprint": "82c0e02b9d3f",
+   "human": false,
+   "rule": "platform.containers.data-volume-loss-is-high",
+   "source": "scoville/rules_platform.py#PLATFORM_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.010": {
+   "file": "specs/risk-catalogue/source-control-and-containers/platform-risk-ratings.feature",
+   "fingerprint": "82c0e02b9d3f",
+   "human": false,
+   "rule": "platform.kubernetes.cascading-deletes-outrank-restarts",
+   "source": "scoville/rules_platform.py#PLATFORM_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.011": {
+   "file": "specs/risk-catalogue/source-control-and-containers/platform-risk-ratings.feature",
+   "fingerprint": "82c0e02b9d3f",
+   "human": false,
+   "rule": "platform.iac.destroy-outranks-apply",
+   "source": "scoville/rules_platform.py#PLATFORM_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+    "tests/test_scoville.py#test_terraform_plan_is_free_destroy_is_not"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.012": {
+   "file": "specs/risk-catalogue/source-control-and-containers/platform-risk-ratings.feature",
+   "fingerprint": "82c0e02b9d3f",
+   "human": false,
+   "rule": "platform.cloud.account-wide-destruction-is-critical",
+   "source": "scoville/rules_platform.py#PLATFORM_RULES",
+   "status": "verified",
+   "test": "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+   "tests": [
+    "tests/test_corpus.py#test_corpus_command_scores_as_catalogued",
+    "tests/test_scoville.py#test_aws_read_is_free_write_is_not"
+   ]
+  },
+  "risk-catalogue.source-control-and-containers.013": {
+   "file": "specs/risk-catalogue/source-control-and-containers/platform-risk-ratings.feature",
+   "fingerprint": "82c0e02b9d3f",
+   "human": false,
+   "rule": "platform.kubernetes.namespace-flag-read-as-namespace-delete",
+   "source": "scoville/rules_platform.py#PLATFORM_RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-catalogue.source-control-and-containers.014": {
+   "file": "specs/risk-catalogue/source-control-and-containers/platform-risk-ratings.feature",
+   "fingerprint": "82c0e02b9d3f",
+   "human": false,
+   "rule": "platform.git.branch-name-read-as-force-checkout",
+   "source": "scoville/rules_platform.py#PLATFORM_RULES",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-scoring.amplifiers.001": {
+   "file": "specs/risk-scoring/amplifiers/risk-amplifiers.feature",
+   "fingerprint": "e1ca5e03df76",
+   "human": false,
+   "rule": "risk.amplifiers.flags-and-target-escalate-a-delete",
+   "source": "scoville/amplifiers.py#AMPS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_rm_escalates_with_flags_then_target",
+   "tests": [
+    "tests/test_scoville.py#test_rm_escalates_with_flags_then_target",
+    "tests/test_scoville.py#test_no_preserve_root_is_worse_than_root_alone"
+   ]
+  },
+  "risk-scoring.amplifiers.002": {
+   "file": "specs/risk-scoring/amplifiers/risk-amplifiers.feature",
+   "fingerprint": "e1ca5e03df76",
+   "human": false,
+   "rule": "risk.amplifiers.generic-arguments-on-any-binary",
+   "source": "scoville/amplifiers.py#AMPS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_secret_on_the_command_line",
+   "tests": [
+    "tests/test_scoville.py#test_secret_on_the_command_line",
+    "tests/test_scoville.py#test_verification_disabled_is_generic",
+    "tests/test_scoville.py#test_production_target_escalates",
+    "tests/test_scoville.py#test_assume_yes_is_the_same_signal_on_every_binary"
+   ]
+  },
+  "risk-scoring.amplifiers.003": {
+   "file": "specs/risk-scoring/amplifiers/risk-amplifiers.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "risk.amplifiers.no-double-counting",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_rule_does_not_also_collect_the_amp_it_exists_for",
+   "tests": [
+    "tests/test_scoville.py#test_a_rule_does_not_also_collect_the_amp_it_exists_for",
+    "tests/test_scoville.py#test_a_rule_that_prices_its_own_yes_does_not_double_count",
+    "tests/test_scoville.py#test_verification_disabled_is_generic"
+   ]
+  },
+  "risk-scoring.amplifiers.004": {
+   "file": "specs/risk-scoring/amplifiers/risk-amplifiers.feature",
+   "fingerprint": "66c46cd10fed",
+   "human": false,
+   "rule": "risk.amplifiers.system-directory-targets",
+   "source": "scoville/scoring.py#_dir_factor",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_system_dirs_escalate_but_build_dirs_dampen",
+   "tests": [
+    "tests/test_scoville.py#test_system_dirs_escalate_but_build_dirs_dampen",
+    "tests/test_scoville.py#test_paths_under_a_system_dir_score_below_the_dir_itself"
+   ]
+  },
+  "risk-scoring.amplifiers.005": {
+   "file": "specs/risk-scoring/amplifiers/risk-amplifiers.feature",
+   "fingerprint": "66c46cd10fed",
+   "human": false,
+   "rule": "risk.amplifiers.device-node-target",
+   "source": "scoville/scoring.py#_dir_factor",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-scoring.amplifiers.006": {
+   "file": "specs/risk-scoring/amplifiers/risk-amplifiers.feature",
+   "fingerprint": "e1ca5e03df76",
+   "human": false,
+   "rule": "risk.amplifiers.widen-scope-and-reversibility",
+   "source": "scoville/amplifiers.py#AMPS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_privileged_and_host_mount_widen_the_scope",
+   "tests": [
+    "tests/test_scoville.py#test_privileged_and_host_mount_widen_the_scope",
+    "tests/test_scoville.py#test_open_to_the_world_is_generic"
+   ]
+  },
+  "risk-scoring.amplifiers.007": {
+   "file": "specs/risk-scoring/amplifiers/risk-amplifiers.feature",
+   "fingerprint": "e1ca5e03df76",
+   "human": false,
+   "rule": "risk.amplifiers.negated-purge-is-not-a-purge",
+   "source": "scoville/amplifiers.py#AMPS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_negated_cascade_is_not_a_purge",
+   "tests": [
+    "tests/test_scoville.py#test_a_negated_cascade_is_not_a_purge"
+   ]
+  },
+  "risk-scoring.amplifiers.008": {
+   "file": "specs/risk-scoring/amplifiers/target-and-context-amplifiers.feature",
+   "fingerprint": "9df614390c26",
+   "human": false,
+   "rule": "risk.amplifiers.target-sensitivity",
+   "source": "scoville/scoring.py#path_factors",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_rm_escalates_with_flags_then_target",
+   "tests": [
+    "tests/test_scoville.py#test_rm_escalates_with_flags_then_target",
+    "tests/test_scoville.py#test_system_dirs_escalate_but_build_dirs_dampen"
+   ]
+  },
+  "risk-scoring.amplifiers.009": {
+   "file": "specs/risk-scoring/amplifiers/target-and-context-amplifiers.feature",
+   "fingerprint": "b7a1391acd70",
+   "human": false,
+   "rule": "risk.amplifiers.unset-variable-to-root",
+   "source": "scoville/scoring.py#_var_path_factor",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_unset_variable_expanding_to_root",
+   "tests": [
+    "tests/test_scoville.py#test_unset_variable_expanding_to_root"
+   ]
+  },
+  "risk-scoring.amplifiers.010": {
+   "file": "specs/risk-scoring/amplifiers/target-and-context-amplifiers.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "risk.amplifiers.runs-as-root",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_sudo_raises_and_is_transparent",
+   "tests": [
+    "tests/test_scoville.py#test_sudo_raises_and_is_transparent"
+   ]
+  },
+  "risk-scoring.amplifiers.011": {
+   "file": "specs/risk-scoring/amplifiers/target-and-context-amplifiers.feature",
+   "fingerprint": "176e5cbc3e60",
+   "human": false,
+   "rule": "risk.amplifiers.download-piped-to-interpreter",
+   "source": "scoville/scoring.py#analyze",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_curl_pipe_shell",
+   "tests": [
+    "tests/test_scoville.py#test_curl_pipe_shell",
+    "tests/test_scoville.py#test_remote_code_is_critical_however_it_is_spelled"
+   ]
+  },
+  "risk-scoring.amplifiers.012": {
+   "file": "specs/risk-scoring/amplifiers/target-and-context-amplifiers.feature",
+   "fingerprint": "c9314703acdc",
+   "human": false,
+   "rule": "risk.amplifiers.download-then-run",
+   "source": "scoville/scoring.py#_flag_deferred_exec",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_download_then_execute_is_the_same_risk_as_the_pipe",
+   "tests": [
+    "tests/test_scoville.py#test_download_then_execute_is_the_same_risk_as_the_pipe",
+    "tests/test_scoville.py#test_downloaded_script_is_not_double_counted"
+   ]
+  },
+  "risk-scoring.score-and-bands.001": {
+   "file": "specs/risk-scoring/score-and-bands/risk-scales.feature",
+   "fingerprint": "a366b32f134e",
+   "human": false,
+   "rule": "risk.bands.score-maps-to-fixed-band",
+   "source": "scoville/scales.py#band",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_bands",
+   "tests": [
+    "tests/test_scoville.py#test_bands"
+   ]
+  },
+  "risk-scoring.score-and-bands.002": {
+   "file": "specs/risk-scoring/score-and-bands/risk-scales.feature",
+   "fingerprint": "d6578eff3d5f",
+   "human": false,
+   "rule": "risk.scope.widest-factor-wins",
+   "source": "scoville/scales.py#widest",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-scoring.score-and-bands.003": {
+   "file": "specs/risk-scoring/score-and-bands/risk-scales.feature",
+   "fingerprint": "b38404c8b532",
+   "human": false,
+   "rule": "risk.reversibility.hardest-factor-wins",
+   "source": "scoville/scales.py#harder",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-scoring.score-and-bands.004": {
+   "file": "specs/risk-scoring/score-and-bands/scoring-a-command.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "risk.score.capped-at-100",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_scores_are_clamped",
+   "tests": [
+    "tests/test_scoville.py#test_scores_are_clamped"
+   ]
+  },
+  "risk-scoring.score-and-bands.005": {
+   "file": "specs/risk-scoring/score-and-bands/scoring-a-command.feature",
+   "fingerprint": "afb1bb43addf",
+   "human": false,
+   "rule": "risk.score.specific-rule-beats-generic",
+   "source": "scoville/scoring.py#pick_rule",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_specific_rules_beat_generic_verbs_even_when_lower",
+   "tests": [
+    "tests/test_scoville.py#test_specific_rules_beat_generic_verbs_even_when_lower"
+   ]
+  },
+  "risk-scoring.score-and-bands.006": {
+   "file": "specs/risk-scoring/score-and-bands/scoring-a-command.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "risk.score.flag-counted-once",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_a_rule_does_not_also_collect_the_amp_it_exists_for",
+   "tests": [
+    "tests/test_scoville.py#test_a_rule_does_not_also_collect_the_amp_it_exists_for",
+    "tests/test_scoville.py#test_a_rule_that_prices_its_own_yes_does_not_double_count"
+   ]
+  },
+  "risk-scoring.score-and-bands.007": {
+   "file": "specs/risk-scoring/score-and-bands/scoring-a-command.feature",
+   "fingerprint": "176e5cbc3e60",
+   "human": false,
+   "rule": "risk.score.fork-bomb-critical",
+   "source": "scoville/scoring.py#analyze",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_fork_bomb",
+   "tests": [
+    "tests/test_scoville.py#test_fork_bomb"
+   ]
+  },
+  "risk-scoring.score-and-bands.008": {
+   "file": "specs/risk-scoring/score-and-bands/scoring-a-command.feature",
+   "fingerprint": "176e5cbc3e60",
+   "human": false,
+   "rule": "risk.score.substitutions-scored-separately",
+   "source": "scoville/scoring.py#analyze",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_command_substitution_is_analyzed",
+   "tests": [
+    "tests/test_scoville.py#test_command_substitution_is_analyzed"
+   ]
+  },
+  "risk-scoring.softeners.001": {
+   "file": "specs/risk-scoring/softeners/risk-softeners.feature",
+   "fingerprint": "2b9ec56e3593",
+   "human": false,
+   "rule": "risk.softeners.careful-form-scores-lower",
+   "source": "scoville/amplifiers.py#SOFTENERS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_softeners_lower_the_careful_form",
+   "tests": [
+    "tests/test_scoville.py#test_softeners_lower_the_careful_form",
+    "tests/test_scoville.py#test_the_cli_s_own_flags_amplify_and_soften"
+   ]
+  },
+  "risk-scoring.softeners.002": {
+   "file": "specs/risk-scoring/softeners/risk-softeners.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "risk.softeners.dry-run-caps-the-score",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_dry_run_caps_the_score",
+   "tests": [
+    "tests/test_scoville.py#test_dry_run_caps_the_score",
+    "tests/test_scoville.py#test_vault_output_curl_string_sends_nothing",
+    "tests/test_scoville.py#test_assume_no_is_the_mirror"
+   ]
+  },
+  "risk-scoring.softeners.003": {
+   "file": "specs/risk-scoring/softeners/risk-softeners.feature",
+   "fingerprint": "4557eb02957e",
+   "human": false,
+   "rule": "risk.softeners.server-dry-run-is-not-a-dry-run",
+   "source": "scoville/amplifiers.py#DAMPENERS",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_dry_run_server_is_not_a_dampener",
+   "tests": [
+    "tests/test_scoville.py#test_dry_run_server_is_not_a_dampener"
+   ]
+  },
+  "risk-scoring.softeners.004": {
+   "file": "specs/risk-scoring/softeners/risk-softeners.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "risk.softeners.short-n-is-dry-run-only-on-known-tools",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_assume_no_is_the_mirror",
+   "tests": [
+    "tests/test_scoville.py#test_assume_no_is_the_mirror"
+   ]
+  },
+  "risk-scoring.softeners.005": {
+   "file": "specs/risk-scoring/softeners/risk-softeners.feature",
+   "fingerprint": "4557eb02957e",
+   "human": false,
+   "rule": "risk.softeners.check-flag-is-a-dry-run-everywhere",
+   "source": "scoville/amplifiers.py#DAMPENERS",
+   "status": "inferred",
+   "test": "",
+   "tests": []
+  },
+  "risk-scoring.softeners.006": {
+   "file": "specs/risk-scoring/softeners/dry-runs-and-throwaway-targets.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "risk.softeners.dry-run-caps-at-safe",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_dry_run_caps_the_score",
+   "tests": [
+    "tests/test_scoville.py#test_dry_run_caps_the_score"
+   ]
+  },
+  "risk-scoring.softeners.007": {
+   "file": "specs/risk-scoring/softeners/dry-runs-and-throwaway-targets.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "risk.softeners.server-dry-run-not-softened",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_dry_run_server_is_not_a_dampener",
+   "tests": [
+    "tests/test_scoville.py#test_dry_run_server_is_not_a_dampener"
+   ]
+  },
+  "risk-scoring.softeners.008": {
+   "file": "specs/risk-scoring/softeners/dry-runs-and-throwaway-targets.feature",
+   "fingerprint": "66c46cd10fed",
+   "human": false,
+   "rule": "risk.softeners.regenerable-directory",
+   "source": "scoville/scoring.py#_dir_factor",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_system_dirs_escalate_but_build_dirs_dampen",
+   "tests": [
+    "tests/test_scoville.py#test_system_dirs_escalate_but_build_dirs_dampen"
+   ]
+  },
+  "risk-scoring.unknown-commands.001": {
+   "file": "specs/risk-scoring/unknown-commands/unknown-commands.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "risk.unknown.strict-is-medium",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_unknown_command_is_low_unless_strict",
+   "tests": [
+    "tests/test_scoville.py#test_unknown_command_is_low_unless_strict"
+   ]
+  },
+  "risk-scoring.unknown-commands.002": {
+   "file": "specs/risk-scoring/unknown-commands/unknown-commands.feature",
+   "fingerprint": "0e18fae2a800",
+   "human": false,
+   "rule": "risk.unknown.destructive-verb-floor",
+   "source": "scoville/scoring.py#score_command",
+   "status": "verified",
+   "test": "tests/test_scoville.py#test_an_unknown_cli_with_a_destructive_verb_is_never_safe",
+   "tests": [
+    "tests/test_scoville.py#test_an_unknown_cli_with_a_destructive_verb_is_never_safe"
+   ]
+  }
+ },
+ "taxonomy": {
+  "domains": [
+   {
+    "areas": [
+     {
+      "description": "Accepting commands as arguments, from stdin or from a script file.",
+      "slug": "input-sources",
+      "title": "Input sources"
+     },
+     {
+      "description": "Breaking a command line into separate commands at pipes, chains, subshells, quotes and comments.",
+      "slug": "command-splitting",
+      "title": "Command splitting"
+     },
+     {
+      "description": "Recognising shell functions and aliases defined in the scored text and scoring what they expand to.",
+      "slug": "functions-and-aliases",
+      "title": "Functions and aliases"
+     },
+     {
+      "description": "Looking through sudo, ssh, docker exec, env and similar wrappers to score the command they run.",
+      "slug": "wrapped-commands",
+      "title": "Wrapped commands"
+     }
+    ],
+    "description": "How scoville takes in shell text and works out which commands it would actually run.",
+    "slug": "command-reading",
+    "title": "Command reading"
+   },
+   {
+    "areas": [
+     {
+      "description": "Combining factors into a capped score and naming the band (safe to critical) it falls in.",
+      "slug": "score-and-bands",
+      "title": "Score and bands"
+     },
+     {
+      "description": "Classifying how far the damage reaches, from a single file up to a whole host or fleet.",
+      "slug": "blast-radius",
+      "title": "Blast radius"
+     },
+     {
+      "description": "Judging whether a command's effect can be undone, and how easily.",
+      "slug": "reversibility",
+      "title": "Reversibility"
+     },
+     {
+      "description": "Raising the score for forcing flags, recursive deletes, root or core-directory targets and unguarded variables.",
+      "slug": "amplifiers",
+      "title": "Amplifiers"
+     },
+     {
+      "description": "Lowering the score for dry runs, interactive prompts and other ways out.",
+      "slug": "softeners",
+      "title": "Softeners"
+     },
+     {
+      "description": "Scoring commands no rule recognises, including strict mode that treats them as medium risk.",
+      "slug": "unknown-commands",
+      "title": "Unknown commands"
+     }
+    ],
+    "description": "Turning a recognised command into a 0\u2013100 score, a band, a blast radius and a reversibility verdict.",
+    "slug": "risk-scoring",
+    "title": "Risk scoring"
+   },
+   {
+    "areas": [
+     {
+      "description": "Rules for files, privilege, shells, system state, networking and package managers on the local machine.",
+      "slug": "host-and-files",
+      "title": "Host and files"
+     },
+     {
+      "description": "Rules for git, docker, Kubernetes, infrastructure-as-code and the major cloud CLIs.",
+      "slug": "source-control-and-containers",
+      "title": "Source control and containers"
+     },
+     {
+      "description": "Rules for databases, storage, network exposure, boot, keys and clusters that hold data.",
+      "slug": "data-and-services",
+      "title": "Data and services"
+     },
+     {
+      "description": "Classifying the long tail of resource CLIs by their verbs (read, change, destroy).",
+      "slug": "resource-clis",
+      "title": "Resource CLIs"
+     },
+     {
+      "description": "Refusing rule entries that use an undefined scope, reversibility or malformed pattern.",
+      "slug": "catalogue-integrity",
+      "title": "Catalogue integrity"
+     }
+    ],
+    "description": "The built-in knowledge of which commands are dangerous and why.",
+    "slug": "risk-catalogue",
+    "title": "Risk catalogue"
+   },
+   {
+    "areas": [
+     {
+      "description": "Resolving hidden image and container entrypoints through read-only docker inspect.",
+      "slug": "container-introspection",
+      "title": "Container introspection"
+     },
+     {
+      "description": "Reading the kubectl verb, resource, namespace and current context, and checking RBAC with auth can-i under a timeout.",
+      "slug": "kubernetes-context",
+      "title": "Kubernetes context"
+     }
+    ],
+    "description": "Optionally asking the local environment, read-only, what a command would really do.",
+    "slug": "live-context",
+    "title": "Live context"
+   },
+   {
+    "areas": [
+     {
+      "description": "Finding the nearest .scovillerc above the analysed file, or using an explicit or disabled config.",
+      "slug": "config-discovery",
+      "title": "Config discovery"
+     },
+     {
+      "description": "Applying per-path re-ratings of rules and rejecting configs that cannot be read as written.",
+      "slug": "rule-overrides",
+      "title": "Rule overrides"
+     }
+    ],
+    "description": "Letting a repository re-rate rules for its own context.",
+    "slug": "repo-policy",
+    "title": "Repository policy"
+   },
+   {
+    "areas": [
+     {
+      "description": "The human-readable table of commands, scores and contributing factors, with quiet and verbose modes.",
+      "slug": "text-report",
+      "title": "Text report"
+     },
+     {
+      "description": "Naming risk levels as chilli peppers instead of bands, with heat markers.",
+      "slug": "pepper-scale",
+      "title": "Pepper scale"
+     },
+     {
+      "description": "Machine-readable results for hooks, CI and other tooling.",
+      "slug": "json-output",
+      "title": "JSON output"
+     },
+     {
+      "description": "Colouring levels on a terminal and turning colour off for non-ttys, NO_COLOR or --no-color.",
+      "slug": "colour",
+      "title": "Colour"
+     }
+    ],
+    "description": "Presenting the verdict to people and to downstream tools.",
+    "slug": "reporting",
+    "title": "Reporting"
+   },
+   {
+    "areas": [
+     {
+      "description": "Printing the long form for a rule or amplifier, describing the class of incident it prevents.",
+      "slug": "rule-explanations",
+      "title": "Rule explanations"
+     },
+     {
+      "description": "Printing every rule and amplifier with its base score and the commands it matches.",
+      "slug": "rule-listing",
+      "title": "Rule listing"
+     },
+     {
+      "description": "Suggesting the closest rule id when an unknown one is asked for.",
+      "slug": "id-suggestions",
+      "title": "ID suggestions"
+     }
+    ],
+    "description": "Helping users understand why a rule exists and what it covers.",
+    "slug": "explanations",
+    "title": "Explanations"
+   },
+   {
+    "areas": [
+     {
+      "description": "Exiting non-zero when any command reaches a chosen risk level.",
+      "slug": "fail-thresholds",
+      "title": "Fail thresholds"
+     },
+     {
+      "description": "Distinct exit codes for usage errors, bad configs and other failures.",
+      "slug": "exit-codes",
+      "title": "Exit codes"
+     },
+     {
+      "description": "Reporting the installed scoville version.",
+      "slug": "version-reporting",
+      "title": "Version reporting"
+     },
+     {
+      "description": "Exposing scoring, rules and rendering as an importable Python package.",
+      "slug": "library-api",
+      "title": "Library API"
+     }
+    ],
+    "description": "Using scoville as a guard in hooks and CI pipelines.",
+    "slug": "gating",
+    "title": "Gating and automation"
+   },
+   {
+    "areas": [
+     {
+      "description": "Make targets for setup, install, lint, test, build and inventory regeneration.",
+      "slug": "build-and-tasks",
+      "title": "Build and tasks"
+     },
+     {
+      "description": "The Docker image that packages the CLI for CI and hook use.",
+      "slug": "container-image",
+      "title": "Container image"
+     },
+     {
+      "description": "Sample scripts that show scoville catching a dangerous command among harmless ones.",
+      "slug": "examples",
+      "title": "Examples"
+     }
+    ],
+    "description": "Building, packaging and demonstrating scoville.",
+    "slug": "developer-tooling",
+    "title": "Developer tooling"
+   }
+  ]
+ }
+}

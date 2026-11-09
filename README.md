@@ -10,6 +10,12 @@
 [![CI carbon](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/fabiocicerchia/scoville/gh-pages/badge.json)](.github/workflows/carbon-badge.yml)
 [![Release](https://img.shields.io/github/v/release/fabiocicerchia/scoville)](https://github.com/fabiocicerchia/scoville/releases)
 
+> [!WARNING]
+> **This project is retired** and no longer maintained. If you need something
+> for this, [shellfirm](https://github.com/kaplanelad/shellfirm) checks shell
+> commands for risk before they run, for people and AI agents alike. It is a
+> separate project, actively developed, and worth a look.
+
 A Scoville scale for your terminal: how spicy is this command, and what does it
 burn? Give it a command, a pipeline or a whole script; get a score, a blast
 radius, a reversibility verdict — and every factor that contributed, so you can
